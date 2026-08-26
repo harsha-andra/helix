@@ -121,8 +121,28 @@ public interface ClaimRepository extends JpaRepository<Claim, UUID> {
                                     @Param("term") String term,
                                     Pageable pageable);
 
-    /** Detail view: everything needed for one claim, without a second round trip per section. */
-    @EntityGraph(attributePaths = {"policy", "policy.coverages", "claimant", "adjuster", "lines", "documents"})
+    /**
+     * Detail view.
+     *
+     * `documents` is deliberately NOT in this graph, and neither is a second collection of any
+     * kind. Hibernate cannot join-fetch two bags in one query — a List-valued association with no
+     * @OrderColumn is a bag, and fetching two of them throws MultipleBagFetchException, because
+     * the cartesian product of the two collections cannot be unambiguously unpicked back into
+     * two ordered lists.
+     *
+     * The first version of this method listed both `lines` and `documents` and threw at runtime
+     * on every call. It compiled, started, and passed every test that did not open a claim.
+     *
+     * `lines` stays in the graph because the detail view always renders them and the count drives
+     * the totals. `documents` is left to batch fetching (default_batch_fetch_size in
+     * application.yml), which costs one extra query for the whole page rather than one per row.
+     *
+     * The nested path "policy.coverages" is also absent, and also on purpose: it made Hibernate
+     * fail with "Could not generate fetch : Claim -> policy" once `lines` was in the same graph.
+     * Coverages are batch-fetched instead, which is one additional query for a single claim.
+     * A detail view is one row — the thing worth optimising there is round trips, not joins.
+     */
+    @EntityGraph(attributePaths = {"policy", "claimant", "adjuster", "lines"})
     Optional<Claim> findWithDetailById(UUID id);
 
     long countByStatus(ClaimStatus status);

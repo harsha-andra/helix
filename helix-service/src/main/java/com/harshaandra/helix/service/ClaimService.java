@@ -197,7 +197,15 @@ public class ClaimService {
         recordAudit(claim, "STATUS_CHANGED", actor, from + " -> " + to
                 + (command.reason() == null ? "" : " (" + command.reason() + ")"));
 
-        return claimMapper.toDetail(claim);
+        // Flush before mapping. Hibernate increments @Version at flush time, so mapping a
+        // still-dirty entity hands back the version the caller already had. The client stores
+        // that value, sends it with its next update, fails the version check, and gets a 409 -
+        // with nobody else having touched the claim.
+        //
+        // An optimistic-locking API is only usable if every response carries a version the
+        // client can actually use next. Caught by ConcurrentClaimEditTest.
+        Claim flushed = claimRepository.saveAndFlush(claim);
+        return claimMapper.toDetail(flushed);
     }
 
     @Transactional
