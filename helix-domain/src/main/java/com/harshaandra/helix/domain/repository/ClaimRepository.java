@@ -25,15 +25,15 @@ public interface ClaimRepository extends JpaRepository<Claim, UUID> {
      * ---------------------------------------------------------------------------------------
      * Every association on Claim is LAZY. This method emits one query for the page of claims,
      * and then the DTO mapper dereferences policy, claimant, adjuster and lines on each row,
-     * emitting four more queries per claim. At a page size of 50 that is 1 + (4 x 50) = 201
-     * queries to render one list.
+     * emitting a further query per distinct association instance. Measured on a page of 100:
+     * 244 statements to render one list.
      *
      * This is not a hypothetical. It is the default outcome of pairing lazy associations with
      * a mapper that reads them, and it is invisible in code review because the mapper looks
      * innocent. It only shows up in the SQL log or in a query-count assertion.
      *
-     * Use {@link #findAllForListing(Pageable)} instead. This one exists so the regression test
-     * can prove the difference, and so ARCHITECTURE.md can cite real numbers.
+     * Use {@link #findListRows} instead. This one exists so the regression test can prove the
+     * difference, and so ARCHITECTURE.md can cite measured rather than remembered numbers.
      */
     @Query("select c from Claim c")
     Page<Claim> findAllNaive(Pageable pageable);
@@ -44,9 +44,9 @@ public interface ClaimRepository extends JpaRepository<Claim, UUID> {
      *
      * The entity graph collapses the three to-one associations (policy, claimant, adjuster) into
      * a single join, which removes most of the queries the naive path emits. Measured on a page
-     * of 50: 103 statements down to 52.
+     * of 100: 244 statements down to 102.
      *
-     * 52, not 2. The remaining 50 are the `lines` collection: the summary carries a line count,
+     * 102, not 2. The remaining 100 are the `lines` collection: the summary carries a line count,
      * `getLines().size()` initialises the collection, and that is one select per row. The graph
      * fixed the associations it named and left the one it did not.
      *
@@ -57,18 +57,6 @@ public interface ClaimRepository extends JpaRepository<Claim, UUID> {
     @EntityGraph(attributePaths = {"policy", "claimant", "adjuster"})
     @Query("select c from Claim c")
     Page<Claim> findAllForListing(Pageable pageable);
-
-    @EntityGraph(attributePaths = {"policy", "claimant", "adjuster"})
-    @Query("""
-            select c from Claim c
-            where (:status is null or c.status = :status)
-              and (:term is null or lower(c.claimNumber) like lower(concat('%', :term, '%'))
-                   or lower(c.claimant.lastName) like lower(concat('%', :term, '%'))
-                   or lower(c.policy.policyNumber) like lower(concat('%', :term, '%')))
-            """)
-    Page<Claim> search(@Param("status") ClaimStatus status,
-                       @Param("term") String term,
-                       Pageable pageable);
 
     /**
      * THE ACTUAL LIST QUERY. One statement for the page, one for the count.

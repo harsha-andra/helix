@@ -25,7 +25,8 @@ public class PolicyService {
 
     @Transactional(readOnly = true)
     public Page<PolicyDtos.Summary> search(String term, Pageable pageable) {
-        String normalised = (term == null || term.isBlank()) ? null : term.trim();
+        // Empty, never null - see the note on PolicyRepository#search.
+        String normalised = (term == null || term.isBlank()) ? "" : term.trim();
         return policyRepository.search(normalised, pageable).map(policyMapper::toSummary);
     }
 

@@ -1,0 +1,362 @@
+# HELIX — Azure DevOps pipeline.
+#
+# Mirrors .github/workflows/ci.yml stage-for-stage: build+unit tests ->
+# integration tests -> Angular (guarded) -> OWASP Dependency-Check ->
+# Docker build + Trivy scan -> Helm lint -> deploy. Two CI systems reading
+# the same repository should reach the same verdict on the same commit;
+# this file is what makes that a checkable claim rather than an assertion.
+#
+# Every step is a plain script against the hosted Ubuntu image's built-in
+# tools (JDK 21 via JAVA_HOME_21_X64, Node via the built-in NodeTool task,
+# Docker) rather than a marketplace extension, so this pipeline runs on a
+# brand-new Azure DevOps organisation with zero extra installs.
+#
+# Cloud auth uses an Azure Resource Manager service connection configured
+# for Workload Identity federation (Azure DevOps' name for OIDC-based
+# federation) — Project Settings -> Service connections -> Azure Resource
+# Manager -> "Workload identity federation". No client secret is stored in
+# Azure DevOps, the same property GitHub's `azure/login` OIDC step has in
+# ci.yml. The connection name below (helix-azure-oidc) is a placeholder;
+# create it once per project and it needs no further secret management.
+
+trigger:
+  branches:
+    include: [main]
+  tags:
+    include: ["v*"]
+
+pr:
+  branches:
+    include: [main]
+
+variables:
+  javaHome: $(JAVA_HOME_21_X64)
+  acrName: "<your-acr-name>"                 # e.g. acrhelixprod — no subscription/tenant id here, see infra/README.md
+  azureServiceConnection: "helix-azure-oidc" # ARM service connection, Workload Identity federation (OIDC)
+  isMain: $[and(eq(variables['Build.Reason'], 'IndividualCI'), eq(variables['Build.SourceBranch'], 'refs/heads/main'))]
+  isTag: $[startsWith(variables['Build.SourceBranch'], 'refs/tags/v')]
+
+stages:
+
+  # ---------------------------------------------------------------------
+  # 1. Build + unit tests — same gate as ci.yml's build-and-unit-test.
+  # ---------------------------------------------------------------------
+  - stage: Build
+    displayName: "Build & unit tests"
+    jobs:
+      - job: BuildAndUnitTest
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+          - script: |
+              set -e
+              export JAVA_HOME=$(javaHome)
+              mvn -B -ntp verify
+            displayName: "mvn verify (unit tests only — see pom.xml excludedGroups)"
+          - task: PublishTestResults@2
+            condition: always()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: "**/surefire-reports/TEST-*.xml"
+              failTaskOnFailedTests: false
+          - task: PublishPipelineArtifact@1
+            inputs:
+              targetPath: helix-app/target/helix.jar
+              artifact: helix-jar
+
+  # ---------------------------------------------------------------------
+  # 2. Integration tests — Testcontainers, real Postgres. Needs only
+  #    Docker on the agent (already present on the hosted image), the same
+  #    as ci.yml's integration-test job.
+  # ---------------------------------------------------------------------
+  - stage: IntegrationTest
+    displayName: "Integration tests (Testcontainers)"
+    dependsOn: Build
+    jobs:
+      - job: IntegrationTest
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+          - script: |
+              set -e
+              export JAVA_HOME=$(javaHome)
+              mvn -B -ntp -Pintegration test
+            displayName: "mvn -Pintegration test"
+          - task: PublishTestResults@2
+            condition: always()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: "**/surefire-reports/TEST-*.xml"
+              failTaskOnFailedTests: false
+
+  # ---------------------------------------------------------------------
+  # 3. Angular build + tests — guarded exactly like the ci.yml job: every
+  #    step checks for helix-web/ first, so its absence skips steps
+  #    instead of failing the stage.
+  # ---------------------------------------------------------------------
+  - stage: Angular
+    displayName: "Angular build & tests"
+    dependsOn: []   # independent of the Java stages, runs in parallel
+    jobs:
+      - job: AngularBuildTest
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+          - script: |
+              if [ -d "helix-web" ] && [ -f "helix-web/package.json" ]; then
+                echo "##vso[task.setvariable variable=exists;isOutput=true]true"
+              else
+                echo "##vso[task.setvariable variable=exists;isOutput=true]false"
+                echo "##vso[task.logissue type=warning]helix-web/ not present yet — skipping Angular steps."
+              fi
+            name: detect
+            displayName: "Detect helix-web/"
+          - task: NodeTool@0
+            condition: eq(dependencies.detect.outputs['detect.exists'], 'true')
+            inputs:
+              versionSpec: "20.x"
+          - script: npm ci
+            condition: eq(dependencies.detect.outputs['detect.exists'], 'true')
+            workingDirectory: helix-web
+            displayName: "npm ci"
+          - script: npm run build
+            condition: eq(dependencies.detect.outputs['detect.exists'], 'true')
+            workingDirectory: helix-web
+            displayName: "npm run build"
+          - script: |
+              export HELIX_KARMA_CHROME_BIN=/usr/bin/google-chrome-stable
+              npm test -- --watch=false --browsers=ChromeHeadless
+            condition: eq(dependencies.detect.outputs['detect.exists'], 'true')
+            workingDirectory: helix-web
+            displayName: "npm test (headless Chrome, single run)"
+
+  # ---------------------------------------------------------------------
+  # 4. OWASP Dependency-Check — fails at CVSS >= 7. Same ad-hoc plugin
+  #    invocation as ci.yml; no pom.xml change needed.
+  # ---------------------------------------------------------------------
+  - stage: DependencyCheck
+    displayName: "OWASP Dependency-Check"
+    dependsOn: []
+    jobs:
+      - job: DependencyCheck
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+          - script: |
+              set -e
+              export JAVA_HOME=$(javaHome)
+              mvn -B -ntp org.owasp:dependency-check-maven:9.2.0:aggregate \
+                -DfailBuildOnCVSS=7 \
+                -DnvdApiKey="$(NVD_API_KEY)" \
+                -DprettyPrint=true
+            displayName: "Dependency-Check aggregate scan (fail >= CVSS 7)"
+            env:
+              NVD_API_KEY: $(NVD_API_KEY)  # optional pipeline secret variable; see ci.yml's comment on the same key
+          - task: PublishPipelineArtifact@1
+            condition: always()
+            inputs:
+              targetPath: target/dependency-check-report.html
+              artifact: dependency-check-report
+
+  # ---------------------------------------------------------------------
+  # 5. Docker build + Trivy scan — fail on HIGH/CRITICAL.
+  #
+  # Trivy is run as a container (aquasec/trivy) rather than a marketplace
+  # task, for the same "no extension install required" reason as the rest
+  # of this file.
+  # ---------------------------------------------------------------------
+  - stage: DockerScan
+    displayName: "Docker build + Trivy scan"
+    dependsOn: Build
+    jobs:
+      - job: DockerBuildScan
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+          - script: docker build -t helix:ci .
+            displayName: "docker build"
+          - script: |
+              set -e
+              docker run --rm \
+                -v /var/run/docker.sock:/var/run/docker.sock \
+                -v "$(Pipeline.Workspace)/.trivy-cache:/root/.cache/" \
+                aquasec/trivy:0.55.0 image \
+                --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed=false \
+                helix:ci
+            displayName: "Trivy scan (HIGH/CRITICAL fail the job)"
+
+  # ---------------------------------------------------------------------
+  # 6. Helm lint — installed via the official install script, no
+  #    marketplace extension.
+  # ---------------------------------------------------------------------
+  - stage: HelmLint
+    displayName: "Helm lint"
+    dependsOn: []
+    jobs:
+      - job: HelmLint
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+          - script: |
+              set -e
+              curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+              chmod +x get_helm.sh
+              ./get_helm.sh --version v3.15.4
+            displayName: "Install Helm"
+          - script: helm lint ./helm
+            displayName: "helm lint (default values)"
+          - script: helm lint ./helm -f ./helm/values-dev.yaml
+            displayName: "helm lint (dev overlay)"
+          - script: helm lint ./helm -f ./helm/values-prod.yaml
+            displayName: "helm lint (prod overlay)"
+          - script: helm template helix ./helm > /dev/null
+            displayName: "helm template renders cleanly"
+
+  # ---------------------------------------------------------------------
+  # 7. Deploy — blue/green via two parallel Helm releases, a manual
+  #    approval gate, then an (almost) instant cutover. Main branch only;
+  #    skipped entirely for PR validation runs.
+  #
+  # WHY BLUE/GREEN RATHER THAN AN IN-PLACE ROLLING UPDATE: a rolling
+  # update replaces pods of the SAME release gradually — if the new
+  # version is bad, "rollback" means running another rollout in reverse,
+  # which takes just as long as the failed one did and the cluster spends
+  # the whole time in a mixed-version state either way. Blue/green keeps
+  # the previous version's pods fully up and warm the entire time; cutover
+  # and rollback are both a Service selector patch, not a redeploy — see
+  # the Rollback stage at the bottom.
+  # ---------------------------------------------------------------------
+  - stage: DeployProd
+    displayName: "Deploy (blue/green)"
+    dependsOn:
+      - IntegrationTest
+      - DockerScan
+      - DependencyCheck
+      - HelmLint
+    condition: and(succeeded(), eq(variables.isMain, true))
+    jobs:
+      - deployment: DeployProd
+        pool:
+          vmImage: ubuntu-latest
+        environment: "helix-production"   # configure a manual approval check on this Environment in Azure DevOps
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: AzureCLI@2
+                  displayName: "Determine the inactive colour"
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -e
+                      az aks get-credentials --resource-group "$(AKS_RESOURCE_GROUP)" --name "$(AKS_CLUSTER_NAME)" --overwrite-existing
+                      CURRENT=$(kubectl get service helix-stable -n helix -o jsonpath='{.spec.selector.color}' 2>/dev/null || echo "blue")
+                      if [ "$CURRENT" = "blue" ]; then TARGET=green; else TARGET=blue; fi
+                      echo "Currently live: $CURRENT — deploying to: $TARGET"
+                      echo "##vso[task.setvariable variable=targetColor]$TARGET"
+                      echo "##vso[task.setvariable variable=currentColor]$CURRENT"
+
+                - task: AzureCLI@2
+                  displayName: "helm upgrade --install (the inactive colour only — the live colour is untouched)"
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -e
+                      helm upgrade --install "helix-$(targetColor)" ./helm \
+                        --namespace helix --create-namespace \
+                        -f ./helm/values-prod.yaml \
+                        --set fullnameOverride="helix-$(targetColor)" \
+                        --set podLabels.color="$(targetColor)" \
+                        --set image.tag="$(Build.SourceVersion)" \
+                        --wait --timeout 10m
+
+                - task: AzureCLI@2
+                  displayName: "Smoke test the new colour directly (bypassing the stable Service)"
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -e
+                      kubectl -n helix rollout status deployment/helix-$(targetColor) --timeout=180s
+                      kubectl -n helix port-forward deployment/helix-$(targetColor) 18080:8080 &
+                      PF_PID=$!
+                      sleep 5
+                      curl -fsS http://localhost:18080/actuator/health/readiness
+                      kill $PF_PID
+
+                # Manual gate: the `environment: helix-production` above is
+                # where the actual approval check lives (Azure DevOps
+                # Environments -> Approvals and checks), evaluated before
+                # this deployment job's steps run at all. Nothing below
+                # this comment executes until someone approves it.
+
+                - task: AzureCLI@2
+                  displayName: "Cutover: point the stable Service at the new colour"
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -e
+                      kubectl -n helix patch service helix-stable \
+                        -p "{\"spec\":{\"selector\":{\"app.kubernetes.io/name\":\"helix\",\"color\":\"$(targetColor)\"}}}"
+                      echo "Live colour is now $(targetColor). Previous colour ($(currentColor)) is left running — see the Rollback stage."
+
+  # ---------------------------------------------------------------------
+  # Rollback — not automatic, and deliberately so: a bad deploy that
+  # passed every gate above and only shows a problem after real traffic
+  # hits it needs a human to decide "roll back" is even the right call.
+  # This stage exists to make that a one-click, pre-written action rather
+  # than someone improvising kubectl commands under pressure. Trigger it
+  # manually from the pipeline run's UI ("Run stage").
+  #
+  # Because the previous colour's pods were never touched by DeployProd,
+  # rollback is the same Service-selector patch in reverse — seconds, not
+  # a redeploy:
+  #   kubectl -n helix patch service helix-stable \
+  #     -p '{"spec":{"selector":{"app.kubernetes.io/name":"helix","color":"<previous-colour>"}}}'
+  #
+  # If the bad release must also be torn down (not just taken out of
+  # rotation): `helm uninstall helix-<bad-colour> -n helix`. If instead the
+  # SAME colour needs to go back to an earlier chart revision (e.g. a
+  # config-only regression, not a version cutover):
+  #   helm rollback helix-<colour> <REVISION> -n helix
+  # (`helm history helix-<colour> -n helix` lists candidate revisions.)
+  # ---------------------------------------------------------------------
+  - stage: Rollback
+    displayName: "Rollback (manual trigger only)"
+    dependsOn: DeployProd
+    condition: false   # never runs automatically — start it by hand from the pipeline UI
+    jobs:
+      - deployment: Rollback
+        pool:
+          vmImage: ubuntu-latest
+        environment: "helix-production"
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureCLI@2
+                  displayName: "Patch the stable Service back to the previous colour"
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -e
+                      echo "Set $(PREVIOUS_COLOR) as a pipeline variable before running this stage, then:"
+                      kubectl -n helix patch service helix-stable \
+                        -p "{\"spec\":{\"selector\":{\"app.kubernetes.io/name\":\"helix\",\"color\":\"$(PREVIOUS_COLOR)\"}}}"

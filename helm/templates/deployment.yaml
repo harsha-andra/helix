@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "helix.fullname" . }}
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.hpa.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "helix.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "helix.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        # Forces a rolling restart when the non-secret config changes, so a
+        # ConfigMap edit does not silently sit unapplied until the next
+        # unrelated deploy.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "helix.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # Spreads replicas across nodes on a best-effort basis so a single
+      # node loss cannot take out every pod at once; not a hard requirement
+      # because a small dev cluster may not have enough nodes to satisfy it.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "helix.selectorLabels" . | nindent 20 }}
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: helix
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          # Overrides the image's own ENTRYPOINT (`java -jar /app/helix.jar`,
+          # see ../../Dockerfile). The two files under /mnt/secrets-store are
+          # written by the Secrets Store CSI Driver from Key Vault — see
+          # secretproviderclass.yaml — and turned into the env vars Spring
+          # Boot already binds (SPRING_DATASOURCE_USERNAME/PASSWORD in
+          # helix-app/src/main/resources/application.yml) right here, in the
+          # shell, so no Kubernetes Secret object and no application code
+          # change was needed to wire Key Vault in.
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              export SPRING_DATASOURCE_USERNAME="$(cat /mnt/secrets-store/{{ .Values.secretProviderClass.dbUsernameObjectName }})"
+              export SPRING_DATASOURCE_PASSWORD="$(cat /mnt/secrets-store/{{ .Values.secretProviderClass.dbPasswordObjectName }})"
+              exec java -jar /app/helix.jar
+          envFrom:
+            - configMapRef:
+                name: {{ include "helix.fullname" . }}-config
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          # --- Probes -----------------------------------------------------
+          # See the long comment in values.yaml (probes:) for why liveness
+          # deliberately carries no dependency check.
+          startupProbe:
+            httpGet:
+              path: {{ .Values.probes.startup.path }}
+              port: http
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+            timeoutSeconds: {{ .Values.probes.startup.timeoutSeconds }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.path }}
+              port: http
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.path }}
+              port: http
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: secrets-store
+              mountPath: /mnt/secrets-store
+              readOnly: true
+      volumes:
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ include "helix.fullname" . }}-db-secrets

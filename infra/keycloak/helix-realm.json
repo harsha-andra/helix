@@ -1,0 +1,101 @@
+{
+  "realm": "helix",
+  "enabled": true,
+  "displayName": "HELIX (local)",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 1800,
+
+  "_comment": "Local/demo realm only. Every credential in this file is a throwaway value meant to be read in a repository — see docker-compose.yml for the same note. Nothing here is used, or usable, outside a developer's own machine.",
+
+  "roles": {
+    "realm": [
+      {
+        "name": "ADJUSTER",
+        "description": "Opens and works claims: create, change status, assign."
+      },
+      {
+        "name": "SUPERVISOR",
+        "description": "Everything ADJUSTER can do, plus the audit trail and actuator write/read operations gated to SUPERVISOR in SecurityConfig."
+      },
+      {
+        "name": "READONLY",
+        "description": "Read-only access to claims, policies and directory endpoints. Cannot change a claim's status (ClaimController#changeStatus requires ADJUSTER)."
+      },
+      {
+        "name": "MONITORING",
+        "description": "Scrape access to /actuator/prometheus only — see SecurityConfig, which maps this to hasRole('MONITORING')."
+      }
+    ]
+  },
+
+  "clients": [
+    {
+      "clientId": "helix-app",
+      "name": "HELIX application",
+      "description": "Public client used by the Angular SPA and by curl/Postman for local testing. Public because it is a browser/CLI client with no secret to protect — the resource server never trusts the client, only the signed token.",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": [
+        "http://localhost:4200/*",
+        "http://localhost:8080/*"
+      ],
+      "webOrigins": [
+        "http://localhost:4200",
+        "http://localhost:8080",
+        "+"
+      ],
+      "fullScopeAllowed": true
+    }
+  ],
+
+  "users": [
+    {
+      "username": "demo.adjuster",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Dana",
+      "lastName": "Whitfield",
+      "email": "demo.adjuster@helix.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "helix-demo",
+          "temporary": false
+        }
+      ],
+      "_comment": "One demo account carrying every role so a reviewer can exercise the whole API without juggling logins — the same trade-off local-noauth makes, just via a real token instead of a permissive filter chain.",
+      "realmRoles": [
+        "ADJUSTER",
+        "SUPERVISOR",
+        "READONLY",
+        "MONITORING"
+      ]
+    },
+    {
+      "username": "demo.readonly",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Ravi",
+      "lastName": "Osei",
+      "email": "demo.readonly@helix.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "helix-demo",
+          "temporary": false
+        }
+      ],
+      "_comment": "Second account with only READONLY, so 403 on a write endpoint is easy to demonstrate against a real token.",
+      "realmRoles": [
+        "READONLY"
+      ]
+    }
+  ]
+}

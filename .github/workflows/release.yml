@@ -1,0 +1,115 @@
+name: Release
+
+# Fires on a version tag (v1.2.3). Builds once, verifies once, then
+# publishes the same artifact two ways: the container image (ACR) and a
+# GitHub Release carrying the jar. No cloud credential is stored in this
+# repository to do it — see the OIDC login step below.
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: read
+
+env:
+  JAVA_VERSION: "21"
+  JAVA_DISTRIBUTION: "temurin"
+
+jobs:
+
+  build-and-verify:
+    name: Build & verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      # A release build re-runs both unit and integration tests rather
+      # than trusting main's last CI run — a tag can be pushed from any
+      # commit, and this is the last gate before something ships.
+      - name: mvn verify
+        run: mvn -B -ntp verify
+
+      - name: mvn -Pintegration test
+        run: mvn -B -ntp -Pintegration test
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: helix-jar
+          path: helix-app/target/helix.jar
+          retention-days: 14
+
+  publish-image:
+    name: Build & push release image (ACR, OIDC)
+    needs: build-and-verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # requests a short-lived OIDC token — no ACR/Azure secret lives in this repo
+    outputs:
+      image_tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: version
+        run: echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Azure login (OIDC — no client secret)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: ACR login
+        run: az acr login --name ${{ vars.ACR_NAME }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ vars.ACR_NAME }}.azurecr.io/helix:${{ steps.version.outputs.tag }}
+            ${{ vars.ACR_NAME }}.azurecr.io/helix:latest
+
+      - name: Trivy scan the release image (fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ vars.ACR_NAME }}.azurecr.io/helix:${{ steps.version.outputs.tag }}
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+  github-release:
+    name: Publish GitHub Release
+    needs: publish-image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # only this job needs it, only to create the Release + upload the jar
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: helix-jar
+          path: dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/helix.jar
+          generate_release_notes: true
+          body: |
+            Image: `${{ vars.ACR_NAME }}.azurecr.io/helix:${{ needs.publish-image.outputs.image_tag }}`
+
+            Deploy with:
+            ```
+            helm upgrade --install helix ./helm -f helm/values-prod.yaml \
+              --set image.tag=${{ needs.publish-image.outputs.image_tag }}
+            ```

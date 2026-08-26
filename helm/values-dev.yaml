@@ -1,0 +1,57 @@
+# Dev overrides. A single shared dev cluster: small, cheap, but still the
+# real `prod` Spring profile against a real (dev) Postgres and a real (dev)
+# Entra ID tenant — local-noauth never runs anywhere but a laptop, see
+# docker-compose.yml.
+
+replicaCount: 1
+
+image:
+  tag: "dev"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 384Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+    # 75% of 512Mi ~= 384Mi heap. Tight for a JVM but workable for a
+    # single-replica dev deployment with light traffic; see values-prod.yaml
+    # for headroom sized for real load.
+
+hpa:
+  enabled: false   # one replica in dev; autoscaling has nothing to add
+
+pdb:
+  enabled: false    # a PodDisruptionBudget with one replica just blocks node drains
+
+ingress:
+  enabled: true
+  host: helix-dev.example.com
+  tls:
+    secretName: helix-dev-tls
+
+env:
+  springProfilesActive: "prod"
+  allowedOrigins: "https://helix-dev.example.com"
+  logLevel: "DEBUG"
+
+database:
+  host: helix-dev-postgres.postgres.database.azure.com
+  name: helix
+
+oauth2:
+  issuerUri: "https://login.microsoftonline.com/<dev-tenant-id>/v2.0"
+
+serviceAccount:
+  workloadIdentityClientId: "<dev-identity-client-id>"
+
+secretProviderClass:
+  keyvaultName: "kv-helix-dev"
+  tenantId: "<dev-tenant-id>"
+
+networkPolicy:
+  enabled: true
+
+serviceMonitor:
+  enabled: true

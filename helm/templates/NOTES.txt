@@ -1,0 +1,19 @@
+HELIX has been deployed as {{ include "helix.fullname" . }} in {{ .Release.Namespace }}.
+
+Check rollout status:
+  kubectl rollout status deployment/{{ include "helix.fullname" . }} -n {{ .Release.Namespace }}
+
+{{- if .Values.ingress.enabled }}
+
+Reachable at:
+  https://{{ .Values.ingress.host }}/api/v1/claims
+  https://{{ .Values.ingress.host }}/swagger-ui.html   (non-prod profiles only — see SecurityConfig)
+  https://{{ .Values.ingress.host }}/ws/claims.wsdl
+{{- else }}
+
+No Ingress configured (ingress.enabled=false). Reach the Service from inside
+the cluster, or:
+  kubectl port-forward svc/{{ include "helix.fullname" . }} 8080:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+{{- end }}
+
+Liveness/readiness: kubectl describe pod -l app.kubernetes.io/instance={{ .Release.Name }} -n {{ .Release.Namespace }}

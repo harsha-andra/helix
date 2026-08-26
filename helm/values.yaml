@@ -1,0 +1,229 @@
+# Default values for the helix chart. Deliberately conservative/dev-shaped;
+# values-dev.yaml and values-prod.yaml override the environment-specific bits.
+# No secret material appears anywhere in this file or its overrides — see the
+# secretProviderClass section and templates/secretproviderclass.yaml.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/harsha-andra/helix
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# ---------------------------------------------------------------------------
+# Identity: Azure Workload Identity, not a stored credential.
+#
+# workloadIdentityClientId is the *client ID of an Azure user-assigned
+# managed identity* (see infra/identity.tf), federated to this ServiceAccount
+# by a FederatedIdentityCredential trusting this exact namespace + SA name +
+# OIDC issuer. It is not a secret — it identifies which Azure identity the
+# pod is allowed to become, the same way a username is not a password.
+# ---------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  name: ""
+  workloadIdentityClientId: ""
+  annotations: {}
+
+# Required, verbatim, on every pod for the AKS workload identity mutating
+# admission webhook to project the federated token into it.
+podLabels:
+  azure.workload.identity/use: "true"
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  # Spring Boot / Tomcat can write small temp files (multipart uploads,
+  # embedded Tomcat's work directory) even though this app does not expose
+  # a file-upload endpoint today. Left false rather than asserted true and
+  # silently broken; revisit if/when the documented "not built" document
+  # upload path (docs/ARCHITECTURE.md §8) actually lands.
+  capabilities:
+    drop: ["ALL"]
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+    # Keep this in lockstep with the Dockerfile's
+    # JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75: 75% of 1Gi is a ~768Mi
+    # heap ceiling, leaving ~256Mi in the same cgroup for metaspace, thread
+    # stacks, the JIT code cache and direct buffers. The JVM percentage
+    # does not need to change when this limit changes — it is relative —
+    # but do not drop this limit much below ~512Mi; there is a fixed
+    # non-heap floor a percentage alone cannot shrink past.
+
+# ---------------------------------------------------------------------------
+# Probes.
+#
+# startup gives the JVM room to boot Spring, run Flyway (V1__init.sql, one
+# migration today) and complete Hibernate's `ddl-auto: validate` pass
+# against the real schema, before liveness/readiness are consulted at all.
+# 5s x 30 = 150s of tolerance; a pod that has not become live within that
+# window is genuinely stuck, not just slow.
+#
+# liveness and readiness are Spring Boot's dedicated probe groups
+# (management.endpoint.health.probes.enabled: true in application.yml).
+# Neither group has the datasource indicator added to it in this app's
+# configuration, so BOTH reflect only the JVM's own liveness/readiness
+# state, never a live database or IdP round trip. That is deliberate and
+# matters most for liveness: if liveness also pinged the database, a
+# transient DB blip (a Postgres Flexible Server failover, a network
+# hiccup) would fail liveness on every replica at the same moment, and
+# Kubernetes would restart the entire Deployment simultaneously — turning
+# a few seconds of DB unavailability into a full outage plus a thundering
+# herd of pods reconnecting the instant the database comes back. A
+# read/write request returning 5xx while the DB is briefly down is the
+# correct failure mode; killing every pod that was serving other traffic
+# just fine is not.
+# ---------------------------------------------------------------------------
+probes:
+  startup:
+    path: /actuator/health/liveness
+    periodSeconds: 5
+    failureThreshold: 30
+    timeoutSeconds: 3
+  liveness:
+    path: /actuator/health/liveness
+    periodSeconds: 10
+    failureThreshold: 3
+    timeoutSeconds: 3
+  readiness:
+    path: /actuator/health/readiness
+    periodSeconds: 5
+    failureThreshold: 3
+    timeoutSeconds: 3
+
+# Plain, non-secret configuration -> templates/configmap.yaml.
+env:
+  springProfilesActive: "prod"
+  allowedOrigins: "https://claims.example.com"
+  dbPoolMax: "10"
+  logLevel: "INFO"
+  serverPort: "8080"
+
+# Non-secret connection coordinates. The credentials that go with this host
+# come from Key Vault at pod start (see secretProviderClass below), never
+# from here.
+database:
+  host: helix-postgres.postgres.database.azure.com
+  port: 5432
+  name: helix
+
+oauth2:
+  # Entra ID tenant-specific v2 issuer in Azure; Keycloak's realm URL locally
+  # (see docker-compose.yml). Never a shared secret — HELIX only validates
+  # signatures against this issuer's published JWKS.
+  issuerUri: "https://login.microsoftonline.com/<tenant-id>/v2.0"
+
+# ---------------------------------------------------------------------------
+# Secrets Store CSI Driver + Azure Key Vault provider.
+#
+# Zero secrets in this chart. Not one manifest here contains a credential,
+# an encrypted credential, or a Kubernetes Secret object we authored. What
+# happens instead: the CSI driver mounts the named Key Vault objects as
+# files inside the pod at /mnt/secrets-store, authenticating as the Azure
+# identity federated to this pod's ServiceAccount (workloadIdentityClientId
+# above) — no client secret, no stored token, nothing for the Secrets Store
+# CSI Driver itself to leak, because it never holds a long-lived credential
+# either. The container's entrypoint (templates/deployment.yaml) reads
+# those two files and exports them as the env vars Spring already expects
+# (SPRING_DATASOURCE_USERNAME/PASSWORD) before starting the JVM. There is no
+# synced Kubernetes Secret object anywhere in this flow — deliberately, so
+# `kubectl get secret` in this namespace has nothing claims-related to show.
+# ---------------------------------------------------------------------------
+secretProviderClass:
+  enabled: true
+  keyvaultName: ""
+  tenantId: ""
+  dbUsernameObjectName: helix-db-username
+  dbPasswordObjectName: helix-db-password
+
+ingress:
+  enabled: false
+  className: nginx
+  host: helix.example.com
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  tls:
+    enabled: true
+    secretName: helix-tls
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+pdb:
+  enabled: true
+  minAvailable: 1
+
+# ---------------------------------------------------------------------------
+# NetworkPolicy: default-deny plus explicit egress allows.
+#
+# docs/SECURITY.md, A10: "HELIX makes no outbound HTTP calls driven by user
+# input. The only egress is to the database, the identity provider's JWKS
+# endpoint and Service Bus, all of them fixed configuration." This section
+# is that statement enforced as a Kubernetes object rather than left as a
+# claim in a document.
+# ---------------------------------------------------------------------------
+networkPolicy:
+  enabled: true
+  ingressControllerNamespace: ingress-nginx
+  monitoringNamespace: monitoring
+  postgres:
+    # The AKS subnet (or the Postgres Flexible Server's private-endpoint
+    # subnet) — replace with your VNet's real range. A CIDR, not a DNS
+    # name, because NetworkPolicy egress rules match IPs.
+    cidr: 10.0.1.0/24
+    port: 5432
+  keyVault:
+    # Azure Key Vault is a public HTTPS endpoint unless Private Link is
+    # attached; Kubernetes NetworkPolicy has no equivalent of an Azure NSG
+    # "service tag", so this is a 443-only allow rather than a false
+    # precision this object cannot express. Scope further with Azure
+    # Firewall / NSG service tags if that granularity matters to you.
+    port: 443
+  serviceBus:
+    port: 5671   # AMQP 1.0 over TLS
+  oidcIssuer:
+    # Keycloak in-cluster in docker-compose/dev; Entra ID (public HTTPS) in
+    # prod. 0.0.0.0/0 on port 443 only — see the keyVault note above.
+    cidr: 0.0.0.0/0
+    port: 443
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  path: /actuator/prometheus
+  # /actuator/prometheus is guarded by hasRole('MONITORING') (SecurityConfig)
+  # — Prometheus needs a credential to scrape it, and this chart does not
+  # invent one. Point this at a Secret key holding a bearer token (or an
+  # OAuth2 client-credentials setup on the Prometheus side) as an
+  # operational step for whoever runs the monitoring stack; left blank here
+  # rather than papered over with a fabricated mechanism.
+  bearerTokenSecretName: ""
+  bearerTokenSecretKey: "token"

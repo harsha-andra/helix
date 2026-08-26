@@ -13,6 +13,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.net.URI;
 import java.time.Instant;
@@ -102,6 +103,31 @@ public class GlobalExceptionHandler {
                 .map(GlobalExceptionHandler::describe)
                 .toList();
         problem.setProperty("errors", errors);
+        return problem;
+    }
+
+    /**
+     * A path variable or query parameter that will not convert — `/claims/not-a-uuid`, or
+     * `?status=BANANA`.
+     *
+     * Without this handler Spring's type-mismatch exception reaches the catch-all below and the
+     * caller gets a 500. That is wrong twice over: it tells the client the server is broken when
+     * the request was malformed, and it fills the error log with alerts for other people's typos.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ProblemDetail onTypeMismatch(MethodArgumentTypeMismatchException ex,
+                                        HttpServletRequest request) {
+        String expected = ex.getRequiredType() == null ? "the expected type"
+                : ex.getRequiredType().getSimpleName();
+
+        ProblemDetail problem = base(HttpStatus.BAD_REQUEST, "Malformed parameter",
+                "'" + ex.getName() + "' could not be read as " + expected + ".", request);
+        problem.setType(URI.create(BASE + "malformed-parameter"));
+        problem.setProperty("parameter", ex.getName());
+        problem.setProperty("expectedType", expected);
+        // The rejected value is echoed back because the caller already sent it — but only the
+        // value, never the converter's exception message, which can carry internal type names.
+        problem.setProperty("rejectedValue", String.valueOf(ex.getValue()));
         return problem;
     }
 

@@ -1,0 +1,36 @@
+# Keeps the build context small and the dependency-cache layer in the
+# Dockerfile stable — none of this affects the jar that gets built.
+
+.git
+.github
+
+# The Angular app is built and deployed separately; it plays no part in the
+# Spring Boot image.
+helix-web
+
+# Build outputs — rebuilt inside the image, never copied in.
+**/target
+**/*.class
+
+# Docs, deployment, and tooling that never need to be inside the image.
+docs
+helm
+infra
+load-test
+azure-pipelines.yml
+README.md
+
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# IDE / OS cruft
+.idea
+*.iml
+.vscode
+.settings
+.classpath
+.project
+.DS_Store
+Thumbs.db
+*.log

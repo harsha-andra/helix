@@ -1,0 +1,295 @@
+name: CI
+
+# Runs on every push and PR. Mirrors azure-pipelines.yml stage-for-stage —
+# see the comment at the top of that file — so the same checks gate a
+# merge regardless of which CI system a given environment is watching.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Least privilege by default. Only the one job that actually talks to
+# Azure (publish-dev-image, below) elevates id-token to request an OIDC
+# token; every other job keeps read-only repo access and nothing else.
+permissions:
+  contents: read
+
+env:
+  JAVA_VERSION: "21"
+  JAVA_DISTRIBUTION: "temurin"
+
+jobs:
+
+  # -------------------------------------------------------------------------
+  # 1. Build + unit tests.
+  #
+  # `mvn verify` with no profile runs exactly the 36 unit tests the default
+  # surefire excludedGroups=integration configuration allows through (see
+  # the root pom.xml) — no Docker, no Testcontainers, no external service.
+  # This is deliberately the fast, always-green gate every other job in
+  # this workflow builds on.
+  # -------------------------------------------------------------------------
+  build-and-unit-test:
+    name: Build & unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: mvn verify (unit tests only — see pom.xml excludedGroups)
+        run: mvn -B -ntp verify
+
+      - name: Upload surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: "**/target/surefire-reports/*.xml"
+          retention-days: 7
+
+      - name: Upload built jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: helix-jar
+          path: helix-app/target/helix.jar
+          retention-days: 7
+
+  # -------------------------------------------------------------------------
+  # 2. Integration tests — Testcontainers, a real PostgreSQL.
+  #
+  # docs/ARCHITECTURE.md §6: "Integration tests run against real
+  # PostgreSQL, never H2." This is where ClaimFetchStrategyTest (the
+  # 244 -> 102 -> 2 query-count assertions) and ConcurrentClaimEditTest
+  # (the optimistic-locking 409 contract) actually run. GitHub's
+  # ubuntu-latest runners ship Docker already started, which is all
+  # Testcontainers needs.
+  # -------------------------------------------------------------------------
+  integration-test:
+    name: Integration tests (Testcontainers)
+    needs: build-and-unit-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: mvn -Pintegration test
+        run: mvn -B -ntp -Pintegration test
+
+      - name: Upload surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-surefire-reports
+          path: "**/target/surefire-reports/*.xml"
+          retention-days: 7
+
+  # -------------------------------------------------------------------------
+  # 3. Angular build + tests — guarded.
+  #
+  # helix-web/ is being built in parallel and may not exist yet on every
+  # branch this workflow runs against. Every step below checks the
+  # `detect` step's output first, so a repo state without helix-web/ is a
+  # sequence of skipped steps, not a failed job.
+  # -------------------------------------------------------------------------
+  angular:
+    name: Angular build & tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect helix-web/
+        id: detect
+        run: |
+          if [ -d "helix-web" ] && [ -f "helix-web/package.json" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::helix-web/ not present yet — skipping the Angular build/test steps."
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.detect.outputs.exists == 'true'
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: helix-web/package-lock.json
+
+      - name: npm ci
+        if: steps.detect.outputs.exists == 'true'
+        working-directory: helix-web
+        run: npm ci
+
+      - name: npm run build
+        if: steps.detect.outputs.exists == 'true'
+        working-directory: helix-web
+        run: npm run build
+
+      - name: npm test (headless Chrome, single run)
+        if: steps.detect.outputs.exists == 'true'
+        working-directory: helix-web
+        env:
+          # karma.conf.js resolves the real Chrome binary from this (falling
+          # back to a PATH lookup) before redirecting CHROME_BIN to its own
+          # --no-sandbox wrapper script — see the comment at the top of
+          # helix-web/karma.conf.js. GitHub's ubuntu-latest image ships
+          # Google Chrome preinstalled.
+          HELIX_KARMA_CHROME_BIN: /usr/bin/google-chrome-stable
+        run: npm test -- --watch=false --browsers=ChromeHeadless
+
+  # -------------------------------------------------------------------------
+  # 4. OWASP Dependency-Check — fails the build at CVSS >= 7.
+  #
+  # Invoked by fully-qualified plugin coordinate rather than added to any
+  # pom.xml: the Java build files are out of scope for this change. The
+  # aggregate goal scans every module's resolved dependencies in one pass.
+  # docs/SECURITY.md, A06.
+  # -------------------------------------------------------------------------
+  dependency-check:
+    name: OWASP Dependency-Check (fail >= CVSS 7)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Dependency-Check aggregate scan
+        env:
+          # Optional. Without a key the NVD API rate-limits anonymous
+          # callers hard enough that a cold cache can time out in CI;
+          # request one free at https://nvd.nist.gov/developers/request-an-api-key
+          # and store it as the NVD_API_KEY repository secret to make this
+          # reliable. Works without it, just slower.
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          mvn -B -ntp org.owasp:dependency-check-maven:9.2.0:aggregate \
+            -DfailBuildOnCVSS=7 \
+            -DnvdApiKey="${NVD_API_KEY}" \
+            -DprettyPrint=true
+
+      - name: Upload Dependency-Check report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: target/dependency-check-report.html
+          retention-days: 30
+
+  # -------------------------------------------------------------------------
+  # 5. Docker build + Trivy scan — fail on HIGH/CRITICAL.
+  # -------------------------------------------------------------------------
+  docker-build-scan:
+    name: Docker build + Trivy scan
+    needs: build-and-unit-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: helix:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy scan (HIGH/CRITICAL fail the job)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: helix:ci
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          # Intentionally strict rather than `ignore-unfixed: true` — if an
+          # unfixable base-image CVE ever makes this noisy, that is a
+          # signal to look at the base image, not to loosen this gate.
+          ignore-unfixed: false
+
+  # -------------------------------------------------------------------------
+  # 6. Helm lint — the chart, under every values overlay it ships.
+  # -------------------------------------------------------------------------
+  helm-lint:
+    name: Helm lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: "v3.15.4"
+
+      - name: helm lint (default values)
+        run: helm lint ./helm
+
+      - name: helm lint (dev overlay)
+        run: helm lint ./helm -f ./helm/values-dev.yaml
+
+      - name: helm lint (prod overlay)
+        run: helm lint ./helm -f ./helm/values-prod.yaml
+
+      - name: helm template renders cleanly (default values)
+        run: helm template helix ./helm > /dev/null
+
+  # -------------------------------------------------------------------------
+  # 7. Publish the dev image to ACR — main branch only, OIDC, no stored key.
+  #
+  # This is the one job in this workflow that talks to Azure. It requests
+  # a short-lived OIDC token (`id-token: write` below) that Azure exchanges
+  # for a login against a federated app registration — see the
+  # AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID repository
+  # variables (not secrets: none of the three are sensitive on their own,
+  # and there is no long-lived credential in this repository to protect —
+  # see docs/SECURITY.md, "Secrets"). Skipped entirely on pull requests,
+  # where a fork could not obtain that token anyway.
+  # -------------------------------------------------------------------------
+  publish-dev-image:
+    name: Publish dev image (ACR, OIDC)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [integration-test, docker-build-scan, dependency-check, helm-lint]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC — no client secret)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: ACR login
+        run: az acr login --name ${{ vars.ACR_NAME }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ vars.ACR_NAME }}.azurecr.io/helix:dev
+            ${{ vars.ACR_NAME }}.azurecr.io/helix:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

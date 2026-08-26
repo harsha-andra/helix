@@ -1,0 +1,18 @@
+# Non-secret configuration only. The datasource URL (host/port/database
+# name) is not sensitive on its own — only the username and password are,
+# and those never appear here; see secretproviderclass.yaml and
+# deployment.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "helix.fullname" . }}-config
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+data:
+  SPRING_PROFILES_ACTIVE: {{ .Values.env.springProfilesActive | quote }}
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}"
+  ALLOWED_ORIGINS: {{ .Values.env.allowedOrigins | quote }}
+  DB_POOL_MAX: {{ .Values.env.dbPoolMax | quote }}
+  LOG_LEVEL: {{ .Values.env.logLevel | quote }}
+  SERVER_PORT: {{ .Values.env.serverPort | quote }}
+  OAUTH2_ISSUER_URI: {{ .Values.oauth2.issuerUri | quote }}

@@ -1,0 +1,37 @@
+{{- if .Values.serviceMonitor.enabled -}}
+# Requires the Prometheus Operator CRDs (kube-prometheus-stack or similar)
+# to be installed in the cluster already; this chart does not install them.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "helix.fullname" . }}
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "helix.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: {{ .Values.serviceMonitor.path }}
+      interval: {{ .Values.serviceMonitor.interval }}
+      {{- if .Values.serviceMonitor.bearerTokenSecretName }}
+      # /actuator/prometheus requires hasRole('MONITORING') (SecurityConfig)
+      # — this is a real JWT-protected endpoint, not an open metrics path,
+      # so Prometheus needs a credential to scrape it. This chart references
+      # a Secret by name rather than inventing one: how that Secret is
+      # populated (a client-credentials grant against the same issuer with
+      # a MONITORING-scoped client, refreshed by a sidecar or CronJob; or
+      # giving the Prometheus pod its own workload identity and a
+      # short-lived token from a trusted exchange) is a decision for
+      # whoever operates the monitoring stack, not something this
+      # application chart can prescribe. Left unset by default — see
+      # values.yaml — rather than papered over with a mechanism this repo
+      # cannot verify works.
+      authorization:
+        type: Bearer
+        credentials:
+          name: {{ .Values.serviceMonitor.bearerTokenSecretName }}
+          key: {{ .Values.serviceMonitor.bearerTokenSecretKey }}
+      {{- end }}
+{{- end -}}

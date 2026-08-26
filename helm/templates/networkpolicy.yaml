@@ -1,0 +1,93 @@
+{{- if .Values.networkPolicy.enabled -}}
+# Default-deny for this workload, plus the explicit egress allows the app
+# actually needs. Selecting only helix's own pods (not the whole namespace)
+# on purpose: a NetworkPolicy with policyTypes [Ingress, Egress] and no
+# matching rule for a given direction denies that direction outright for
+# the pods it selects, so listing exactly the allowed egress destinations
+# below already IS the default-deny — nothing reaches this pod, and this
+# pod reaches nothing, beyond what is named here. See docs/SECURITY.md,
+# A10: "HELIX makes no outbound HTTP calls driven by user input. The only
+# egress is to the database, the identity provider's JWKS endpoint and
+# Service Bus, all of them fixed configuration."
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "helix.fullname" . }}
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "helix.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # The ingress controller, talking plain HTTP to the pod (TLS terminates
+    # at the ingress — docs/SECURITY.md, A02).
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressControllerNamespace }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.targetPort }}
+    {{- if .Values.serviceMonitor.enabled }}
+    # Prometheus scraping /actuator/prometheus. NetworkPolicy governs the
+    # network path only; the endpoint's own auth (hasRole('MONITORING'),
+    # SecurityConfig) is a separate concern — see the comment in
+    # servicemonitor.yaml.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.monitoringNamespace }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.targetPort }}
+    {{- end }}
+  egress:
+    # DNS. Nothing above resolves a hostname without it.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # PostgreSQL Flexible Server.
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicy.postgres.cidr }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.postgres.port }}
+    # Azure Key Vault, for the Secrets Store CSI Driver's own traffic (the
+    # driver runs as a DaemonSet, not in this pod's network namespace, but
+    # workload-identity token exchange for this pod's identity — the AAD
+    # token endpoint — is HTTPS egress from the pod itself).
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.keyVault.port }}
+    # Azure Service Bus (AMQP 1.0 over TLS). Not wired to a live consumer
+    # today — docs/ARCHITECTURE.md §8 notes markAdjudicated exists but is
+    # called by tests, not a subscription — kept here for when it is.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.serviceBus.port }}
+    # The OIDC issuer's JWKS endpoint (Entra ID in prod, Keycloak in-cluster
+    # locally/dev — see values.yaml oauth2.issuerUri per environment).
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicy.oidcIssuer.cidr }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.oidcIssuer.port }}
+{{- end -}}

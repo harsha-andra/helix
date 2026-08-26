@@ -8,15 +8,18 @@ import com.harshaandra.helix.service.command.ClaimCommands;
 import com.harshaandra.helix.service.dto.ClaimDtos;
 import com.harshaandra.helix.service.exception.ServiceExceptions.IllegalStatusTransitionException;
 import com.harshaandra.helix.service.exception.ServiceExceptions.StaleClaimException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.UUID;
@@ -50,6 +53,18 @@ class ConcurrentClaimEditTest {
 
     @Autowired
     private TransactionTemplate transactionTemplate;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    /** Commits on its own connection, so it survives our rollback. */
+    private TransactionTemplate competingWriter;
+
+    @BeforeEach
+    void prepareCompetingWriter() {
+        competingWriter = new TransactionTemplate(transactionTemplate.getTransactionManager());
+        competingWriter.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    }
 
     @Test
     @DisplayName("the second adjuster's save is rejected, not silently applied")
@@ -87,35 +102,48 @@ class ConcurrentClaimEditTest {
     }
 
     /**
-     * The service checks the version before touching anything, which produces the friendly 409.
-     * This test bypasses that check and writes through the repository from two transactions, to
-     * prove the @Version column is genuinely enforced by the database round trip and not merely
-     * by our own if-statement.
+     * The service pre-checks the version, which is what produces the friendly 409. This test
+     * proves the guarantee underneath it: that the UPDATE itself carries the version in its
+     * WHERE clause, so a lost update is impossible even if the pre-check were removed.
+     *
+     * The competing write is issued with plain JDBC, behind Hibernate's back. That is what makes
+     * this deterministic — it is exactly what another application instance committing between
+     * our read and our write looks like from this session's point of view, without needing two
+     * threads and a latch to reproduce it.
      */
     @Test
-    @DisplayName("@Version is enforced by the persistence layer, not only by the service check")
+    @DisplayName("@Version is enforced by the UPDATE itself, not only by the service check")
     void versionColumnIsEnforcedAtTheDatabase() {
         UUID claimId = anOpenClaim();
 
-        Claim firstRead = transactionTemplate.execute(status ->
-                claimRepository.findById(claimId).orElseThrow());
-        Claim secondRead = transactionTemplate.execute(status ->
-                claimRepository.findById(claimId).orElseThrow());
-
-        // First transaction commits, bumping the version.
-        transactionTemplate.execute(status -> {
-            Claim managed = claimRepository.findById(claimId).orElseThrow();
-            managed.setDescription("Updated by the first writer");
-            return claimRepository.saveAndFlush(managed);
-        });
-
-        // Second transaction writes a detached instance carrying the now-stale version.
         assertThatThrownBy(() -> transactionTemplate.execute(status -> {
-            secondRead.setDescription("Updated by the second writer");
-            return claimRepository.saveAndFlush(secondRead);
+            Claim managed = claimRepository.findById(claimId).orElseThrow();
+            int versionWeRead = managed.getVersion();
+
+            // Another node commits a change to this row while we hold our copy.
+            //
+            // REQUIRES_NEW is what makes this a genuine simulation: it takes its own connection
+            // and commits independently. Issuing the update on the current transaction's
+            // connection would enlist it in our transaction, and it would roll back with us -
+            // which is precisely the mistake that made the first version of this test pass its
+            // exception assertion and then fail on the state assertion below.
+            int rowsUpdated = competingWriter.execute(other -> jdbcTemplate.update(
+                    "UPDATE claim SET version = version + 1, description = ? WHERE id = ?",
+                    "Committed by another instance", claimId));
+            assertThat(rowsUpdated).isEqualTo(1);
+
+            // Our write now targets a version that no longer exists:
+            //   UPDATE claim SET ... WHERE id = ? AND version = <versionWeRead>
+            // matches zero rows, and Hibernate turns "zero rows updated" into a lock failure
+            // rather than silently doing nothing.
+            managed.setDescription("Committed by us, based on a stale read");
+            assertThat(versionWeRead).isNotNegative();
+            return claimRepository.saveAndFlush(managed);
         })).isInstanceOf(ObjectOptimisticLockingFailureException.class);
 
-        assertThat(firstRead.getVersion()).isEqualTo(secondRead.getVersion());
+        // The other instance's write is the one that survived.
+        assertThat(claimService.get(claimId).description())
+                .isEqualTo("Committed by another instance");
     }
 
     @Test

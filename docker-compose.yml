@@ -1,0 +1,125 @@
+# =============================================================================
+# HELIX — local stack: Postgres, Keycloak, the app.
+#
+# `docker compose up --build` and then:
+#   REST      http://localhost:8080/api/v1/claims
+#   Swagger   http://localhost:8080/swagger-ui.html
+#   WSDL      http://localhost:8080/ws/claims.wsdl
+#   Keycloak  http://localhost:8081  (admin/admin — see below)
+#
+# ALL CREDENTIALS IN THIS FILE ARE THROWAWAY VALUES FOR A LOCAL DEMO STACK.
+# They are not secrets, they are not meant to be secrets, and none of them
+# are reachable outside your own machine. Production credentials never
+# appear in a compose file or a Kubernetes manifest — see helm/ (Azure
+# Workload Identity + Key Vault) and docs/SECURITY.md.
+#
+# The app runs with `local-noauth` active by default (see the `app` service
+# below) so this comes up fully usable with zero identity-provider dance.
+# Keycloak is still started, health-checked and pre-loaded with the `helix`
+# realm so the *real* OAuth2 resource-server path can be exercised too —
+# see the note above the `app` service for how to fetch a real token.
+# =============================================================================
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      # Throwaway local credentials — see the file-level note above.
+      POSTGRES_DB: helix
+      POSTGRES_USER: helix
+      POSTGRES_PASSWORD: helix
+    ports:
+      - "5432:5432"
+    volumes:
+      - helix-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U helix -d helix"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.5
+    command: ["start-dev", "--import-realm"]
+    environment:
+      # Throwaway local credentials — see the file-level note above. This is
+      # the Keycloak *admin console* login, unrelated to the demo API users
+      # baked into the realm export below.
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+    ports:
+      - "8081:8080"
+    volumes:
+      # Pre-imported realm: roles ADJUSTER/SUPERVISOR/READONLY/MONITORING
+      # and two demo users. `--import-realm` loads anything under
+      # data/import on startup. See infra/keycloak/helix-realm.json.
+      - ./infra/keycloak/helix-realm.json:/opt/keycloak/data/import/helix-realm.json:ro
+    healthcheck:
+      # The Keycloak image ships neither curl nor wget; bash's /dev/tcp
+      # pseudo-device is the smallest thing available in every Keycloak
+      # image to check an HTTP endpoint without adding a package.
+      # (Keycloak 26+ moved health checks to a separate management port,
+      # 9000 by default — adjust the port here if you upgrade the image.)
+      test:
+        [
+          "CMD-SHELL",
+          "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && cat <&3 | grep -q '\"status\": \"UP\"'"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    environment:
+      # local-noauth grants the anonymous caller ADJUSTER+SUPERVISOR+
+      # READONLY+MONITORING (see SecurityConfig.LocalNoAuthConfig) so the
+      # whole API is reachable with `docker compose up` and nothing else.
+      # @PreAuthorize is still genuinely evaluated on every call; this
+      # profile does not switch method security off, it just grants the
+      # anonymous principal the roles a signed-in adjuster would have.
+      #
+      # To exercise the REAL OAuth2 resource-server path instead, drop
+      # `local-noauth` from this list, then fetch a token from *inside*
+      # the compose network so its `iss` claim matches OAUTH2_ISSUER_URI
+      # below exactly (Keycloak's issuer reflects whatever host:port the
+      # request came in on, and "keycloak:8080" is only resolvable from
+      # another container, not your host machine):
+      #
+      #   docker compose exec keycloak sh -c '
+      #     curl -s -X POST http://keycloak:8080/realms/helix/protocol/openid-connect/token \
+      #       -d grant_type=password -d client_id=helix-app \
+      #       -d username=demo.adjuster -d password=helix-demo'
+      #
+      # Then call the API with `Authorization: Bearer <access_token>`.
+      SPRING_PROFILES_ACTIVE: "local,local-noauth"
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/helix
+      SPRING_DATASOURCE_USERNAME: helix
+      SPRING_DATASOURCE_PASSWORD: helix
+      OAUTH2_ISSUER_URI: http://keycloak:8080/realms/helix
+      ALLOWED_ORIGINS: "http://localhost:4200,http://localhost:8080"
+      SERVER_PORT: "8080"
+      LOG_LEVEL: INFO
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health/liveness"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+volumes:
+  helix-pgdata:

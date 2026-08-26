@@ -1,0 +1,36 @@
+{{- if .Values.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "helix.fullname" . }}
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+  annotations:
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          # REST (/api/v1), SOAP (/ws, /ws/claims.wsdl), Swagger UI and
+          # OpenAPI (/v3/api-docs) all live on the one Spring Boot process
+          # (see docs/adr/0001-multi-module-boundaries.md) — one backend is
+          # correct here. The Angular SPA is a separate deployable (see
+          # helix-web/) and is not routed through this Ingress.
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "helix.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end -}}
