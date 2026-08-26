@@ -1,0 +1,47 @@
+# Build output
+target/
+build/
+*.jar
+*.war
+!.mvn/wrapper/maven-wrapper.jar
+
+# JAXB classes are generated from src/main/resources/xsd/claims.xsd at build time.
+# The schema is the artifact under version control; the classes are a build output.
+generated-sources/
+
+# Node / Angular
+node_modules/
+dist/
+.angular/
+*.tsbuildinfo
+coverage/
+cypress/videos/
+cypress/screenshots/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local environment — never commit real values
+.env
+.env.local
+*.local.yml
+!application-local.yml
+
+# Terraform state contains resource ids and sometimes secrets
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!example.tfvars
+
+# Logs
+*.log
