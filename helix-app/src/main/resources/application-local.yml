@@ -1,0 +1,23 @@
+# Local development profile: `docker compose up` then `mvn spring-boot:run -Dspring-boot.run.profiles=local`
+spring:
+  jpa:
+    properties:
+      hibernate:
+        # Turned on locally so the N+1 in docs/ARCHITECTURE.md is visible in the console.
+        # Never enabled in a deployed environment: it logs every statement at INFO.
+        format_sql: true
+  flyway:
+    clean-disabled: false
+
+logging:
+  level:
+    com.harshaandra.helix: DEBUG
+    # Uncomment to count queries while reproducing the N+1:
+    # org.hibernate.SQL: DEBUG
+    # org.hibernate.orm.jdbc.bind: TRACE
+
+helix:
+  seed:
+    enabled: true
+  security:
+    allowed-origins: http://localhost:4200,http://localhost:8080

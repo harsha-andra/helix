@@ -1,0 +1,94 @@
+spring:
+  application:
+    name: helix
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/helix}
+    username: ${SPRING_DATASOURCE_USERNAME:helix}
+    # In Azure this is injected from Key Vault via workload identity, never from a manifest.
+    password: ${SPRING_DATASOURCE_PASSWORD:helix}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:10}
+      minimum-idle: 2
+      connection-timeout: 10000
+      # Shorter than the database's own idle timeout so the pool closes connections before
+      # the server does and clients never draw a dead one.
+      max-lifetime: 900000
+
+  jpa:
+    # `validate`, never `update`. Hibernate may check that the mappings agree with the schema;
+    # it may never change the schema. Flyway owns the schema. See ADR 0004.
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false   # an open session during view rendering is how lazy loads escape the service layer
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 50
+          time_zone: UTC
+        order_inserts: true
+        order_updates: true
+        # Collections and lazy to-ones are fetched in batches of 50 rather than one query each.
+        # This is the second half of the N+1 fix: @EntityGraph handles the to-one associations
+        # on the list query, this handles everything the graph does not cover.
+        default_batch_fetch_size: 50
+        query:
+          in_clause_parameter_padding: true
+        # Fails the build-time contract rather than silently paginating in memory.
+        query.fail_on_pagination_over_collection_fetch: true
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+    validate-on-migrate: true
+    locations: classpath:db/migration
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OAUTH2_ISSUER_URI:http://localhost:8081/realms/helix}
+
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    # Never leak a stack trace or the servlet container's default error page.
+    include-stacktrace: never
+    include-message: never
+  compression:
+    enabled: true
+  shutdown: graceful
+
+helix:
+  security:
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:4200}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true       # gives /actuator/health/liveness and /readiness for Kubernetes
+      show-details: when-authorized
+  metrics:
+    tags:
+      application: helix
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+
+logging:
+  level:
+    root: INFO
+    com.harshaandra.helix: ${LOG_LEVEL:INFO}

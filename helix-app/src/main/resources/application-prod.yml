@@ -1,0 +1,27 @@
+# Deployed profile. Every value here comes from the environment; nothing sensitive is committed.
+spring:
+  jpa:
+    properties:
+      hibernate:
+        format_sql: false
+  flyway:
+    clean-disabled: true      # a `flyway clean` against production must be impossible, not merely discouraged
+
+server:
+  tomcat:
+    max-threads: 200
+    accept-count: 100
+
+management:
+  endpoint:
+    health:
+      show-details: never
+
+helix:
+  seed:
+    enabled: false
+
+logging:
+  level:
+    root: WARN
+    com.harshaandra.helix: INFO
