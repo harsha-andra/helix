@@ -15,10 +15,18 @@ helix-api-soap   contract-first JAX-WS endpoints            depends on: service
 helix-app        bootstrap, security, Flyway migrations     depends on: both API modules
 ```
 
-The split exists to make one thing impossible: a protocol adapter reaching into persistence.
-`helix-api-rest` has no compile-time access to `ClaimRepository`, so a controller cannot quietly
-open its own query and drift from the rules the service enforces. That is a constraint the build
-enforces, not a convention a reviewer has to police.
+The split exists to discourage one thing: a protocol adapter reaching into persistence. The
+service layer's entire public surface is DTOs and commands — no repository and no entity is
+returned from it — so a controller that wanted to run its own query would have to import a
+repository directly, which stands out immediately in a diff.
+
+**An honest qualification.** Maven has no Gradle-style `api`/`implementation` distinction, so
+`helix-domain` *is* on the API modules' compile classpath transitively via `helix-service`. The
+boundary is therefore enforced by the shape of the service API and by review, not by the
+compiler. Today no API module imports a repository or an entity (both import only the
+`ClaimStatus` enum, for request binding), and `mvn dependency:tree` confirms the transitive
+path. If this needed to be a hard constraint rather than a strong convention, the tool for it is
+an ArchUnit rule in the test suite — that is not currently written.
 
 The two API modules both depend on `helix-service` and neither depends on the other. `ClaimsEndpoint`
 (SOAP) and `ClaimController` (REST) call the *same* `ClaimService` bean. There is exactly one
