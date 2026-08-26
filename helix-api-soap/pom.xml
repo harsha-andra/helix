@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.harshaandra.helix</groupId>
+    <artifactId>helix-parent</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>helix-api-soap</artifactId>
+  <name>HELIX :: SOAP API</name>
+  <description>Contract-first SOAP endpoints over the same service beans the REST API uses.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.harshaandra.helix</groupId>
+      <artifactId>helix-service</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web-services</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>wsdl4j</groupId>
+      <artifactId>wsdl4j</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>jakarta.xml.bind</groupId>
+      <artifactId>jakarta.xml.bind-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.glassfish.jaxb</groupId>
+      <artifactId>jaxb-runtime</artifactId>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- Generates the JAXB bindings from claims.xsd at build time. The generated sources are
+           NOT committed: the schema is the artifact under version control, the classes are a
+           build output. -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>jaxb2-maven-plugin</artifactId>
+        <version>${jaxb2.plugin.version}</version>
+        <executions>
+          <execution>
+            <id>xjc-claims</id>
+            <goals>
+              <goal>xjc</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <sources>
+            <source>${project.basedir}/src/main/resources/xsd/claims.xsd</source>
+          </sources>
+          <packageName>com.harshaandra.helix.api.soap.generated</packageName>
+          <outputDirectory>${project.build.directory}/generated-sources/jaxb</outputDirectory>
+          <clearOutputDir>true</clearOutputDir>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  HELIX claims contract.
+
+  Contract-first, not code-first. This file is the source of truth: JAXB classes are generated
+  from it at build time and the WSDL is generated from it at runtime. Partner systems integrate
+  against a schema that only changes when someone deliberately edits it, rather than one that
+  reshapes itself whenever a Java field is renamed.
+
+  See docs/adr/0005-contract-first-soap.md.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="http://harsha-andra.dev/helix/claims"
+           targetNamespace="http://harsha-andra.dev/helix/claims"
+           elementFormDefault="qualified">
+
+  <!-- ============================ types ============================ -->
+
+  <xs:simpleType name="ClaimStatus">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="SUBMITTED"/>
+      <xs:enumeration value="UNDER_REVIEW"/>
+      <xs:enumeration value="APPROVED"/>
+      <xs:enumeration value="PARTIALLY_APPROVED"/>
+      <xs:enumeration value="DENIED"/>
+      <xs:enumeration value="PAID"/>
+      <xs:enumeration value="CLOSED"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="Money">
+    <xs:restriction base="xs:decimal">
+      <xs:fractionDigits value="2"/>
+      <xs:totalDigits value="15"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="ClaimLine">
+    <xs:sequence>
+      <xs:element name="lineNumber" type="xs:int"/>
+      <xs:element name="coverageCode" type="xs:string"/>
+      <xs:element name="description" type="xs:string" minOccurs="0"/>
+      <xs:element name="claimedAmount" type="tns:Money"/>
+      <xs:element name="approvedAmount" type="tns:Money" minOccurs="0"/>
+      <xs:element name="status" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="Claim">
+    <xs:sequence>
+      <xs:element name="claimNumber" type="xs:string"/>
+      <xs:element name="policyNumber" type="xs:string"/>
+      <xs:element name="claimantName" type="xs:string"/>
+      <xs:element name="status" type="tns:ClaimStatus"/>
+      <xs:element name="incidentDate" type="xs:date"/>
+      <xs:element name="submittedAt" type="xs:dateTime"/>
+      <xs:element name="totalAmount" type="tns:Money"/>
+      <xs:element name="approvedAmount" type="tns:Money" minOccurs="0"/>
+      <xs:element name="assignedAdjuster" type="xs:string" minOccurs="0"/>
+      <xs:element name="description" type="xs:string" minOccurs="0"/>
+      <xs:element name="version" type="xs:int"/>
+      <xs:element name="line" type="tns:ClaimLine" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ClaimSummary">
+    <xs:sequence>
+      <xs:element name="claimNumber" type="xs:string"/>
+      <xs:element name="policyNumber" type="xs:string"/>
+      <xs:element name="claimantName" type="xs:string"/>
+      <xs:element name="status" type="tns:ClaimStatus"/>
+      <xs:element name="incidentDate" type="xs:date"/>
+      <xs:element name="totalAmount" type="tns:Money"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- ============================ operations ============================ -->
+
+  <xs:element name="GetClaimRequest">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="claimNumber" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name="GetClaimResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="claim" type="tns:Claim"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name="ListClaimsRequest">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="status" type="tns:ClaimStatus" minOccurs="0"/>
+        <xs:element name="page" type="xs:int" minOccurs="0"/>
+        <xs:element name="size" type="xs:int" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name="ListClaimsResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="claim" type="tns:ClaimSummary" minOccurs="0" maxOccurs="unbounded"/>
+        <xs:element name="totalElements" type="xs:long"/>
+        <xs:element name="totalPages" type="xs:int"/>
+        <xs:element name="page" type="xs:int"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name="GetPolicyRequest">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="policyNumber" type="xs:string"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name="GetPolicyResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="policyNumber" type="xs:string"/>
+        <xs:element name="productName" type="xs:string"/>
+        <xs:element name="holderName" type="xs:string"/>
+        <xs:element name="status" type="xs:string"/>
+        <xs:element name="effectiveDate" type="xs:date"/>
+        <xs:element name="expirationDate" type="xs:date"/>
+        <xs:element name="premiumAmount" type="tns:Money"/>
+        <xs:element name="coverage" minOccurs="0" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="code" type="xs:string"/>
+              <xs:element name="name" type="xs:string"/>
+              <xs:element name="limitAmount" type="tns:Money"/>
+              <xs:element name="deductibleAmount" type="tns:Money"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+</xs:schema>
