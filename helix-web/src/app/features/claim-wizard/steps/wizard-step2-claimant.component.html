@@ -1,0 +1,65 @@
+<div class="step">
+  <div>
+    <h3 class="step-section-title">Who is the claimant?</h3>
+    <p class="step__hint">Search by name, email, or city.</p>
+  </div>
+
+  @if (!selectedClaimant()) {
+    <div class="search-box">
+      <mat-icon>search</mat-icon>
+      <input [formControl]="searchControl" placeholder="e.g. Maria Gonzalez or Austin" autocomplete="off" />
+      @if (searching()) {
+        <mat-spinner diameter="18"></mat-spinner>
+      }
+    </div>
+
+    @if (!searching() && searchControl.value && results().length === 0) {
+      <helix-empty-state icon="person_search" title="No matching claimants" message="Try a different name, email, or city."></helix-empty-state>
+    } @else {
+      <div class="result-list">
+        @for (c of results(); track c.id) {
+          <button type="button" class="result-card" (click)="selectClaimant(c)">
+            <div class="result-card__main">
+              <span class="result-card__title">{{ c.firstName }} {{ c.lastName }}</span>
+              <span class="result-card__subtitle">{{ c.email }}</span>
+            </div>
+            <div class="result-card__meta">{{ c.city }}, {{ c.state }}</div>
+          </button>
+        }
+      </div>
+    }
+  } @else {
+    <div class="selected-card">
+      <div class="selected-card__header">
+        <div>
+          <div class="selected-card__title">{{ selectedClaimant()!.firstName }} {{ selectedClaimant()!.lastName }}</div>
+          <div class="selected-card__subtitle">{{ selectedClaimant()!.email }} · {{ selectedClaimant()!.city }}, {{ selectedClaimant()!.state }}</div>
+        </div>
+        <button mat-button (click)="changeClaimant()">
+          <mat-icon>swap_horiz</mat-icon>
+          Change claimant
+        </button>
+      </div>
+    </div>
+  }
+
+  <div>
+    <h3 class="step-section-title">Incident details</h3>
+    <p class="step__hint">When did it happen, and what happened?</p>
+  </div>
+
+  <form [formGroup]="incidentForm" class="incident-form">
+    <mat-form-field appearance="outline">
+      <mat-label>Incident date</mat-label>
+      <input matInput [matDatepicker]="picker" formControlName="incidentDate" [max]="today" />
+      <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+      <mat-datepicker #picker></mat-datepicker>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Description</mat-label>
+      <textarea matInput formControlName="description" rows="4" placeholder="Describe what happened (minimum 10 characters)…"></textarea>
+      <mat-hint align="end">{{ incidentForm.value.description?.length ?? 0 }} characters</mat-hint>
+    </mat-form-field>
+  </form>
+</div>

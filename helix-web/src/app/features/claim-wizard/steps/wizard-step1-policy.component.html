@@ -1,0 +1,77 @@
+<div class="step">
+  @if (!selectedPolicy()) {
+    <div>
+      <h3 class="step-section-title">Which policy is this claim against?</h3>
+      <p class="step__hint">Search by policy number or the policyholder's name.</p>
+    </div>
+
+    <div class="search-box">
+      <mat-icon>search</mat-icon>
+      <input [formControl]="searchControl" placeholder="e.g. POL-2024-018842 or Maria Gonzalez" autocomplete="off" />
+      @if (searching()) {
+        <mat-spinner diameter="18"></mat-spinner>
+      }
+    </div>
+
+    @if (!searching() && searchControl.value && results().length === 0) {
+      <helix-empty-state icon="search_off" title="No matching policies" message="Try a different policy number or holder name."></helix-empty-state>
+    } @else {
+      <div class="result-list">
+        @for (p of results(); track p.id) {
+          <button type="button" class="result-card" (click)="selectPolicy(p)">
+            <div class="result-card__main">
+              <span class="result-card__title">{{ p.policyNumber }}</span>
+              <span class="result-card__subtitle">{{ p.holderName }} · {{ p.productName }}</span>
+            </div>
+            <div class="result-card__meta">
+              <div>{{ p.coverageCount }} coverages</div>
+              <div>{{ p.status }}</div>
+            </div>
+          </button>
+        }
+      </div>
+    }
+  } @else {
+    <div class="selected-card">
+      <div class="selected-card__header">
+        <div>
+          <div class="selected-card__title">{{ selectedPolicy()!.policyNumber }}</div>
+          <div class="selected-card__subtitle">{{ selectedPolicy()!.holderName }} · {{ selectedPolicy()!.productName }}</div>
+        </div>
+        <button mat-button (click)="changePolicy()">
+          <mat-icon>swap_horiz</mat-icon>
+          Change policy
+        </button>
+      </div>
+
+      @if (detailLoading()) {
+        <div class="step__hint">Loading coverage details…</div>
+      }
+      @if (!detailLoading() && selectedPolicyDetail(); as detail) {
+        <div class="selected-card__grid">
+          <div class="field-group">
+            <span class="field-group__label">Status</span>
+            <span class="field-group__value">{{ detail.status }}</span>
+          </div>
+          <div class="field-group">
+            <span class="field-group__label">Effective</span>
+            <span class="field-group__value">{{ detail.effectiveDate | date: 'MMM d, y' }}</span>
+          </div>
+          <div class="field-group">
+            <span class="field-group__label">Expires</span>
+            <span class="field-group__value">{{ detail.expirationDate | date: 'MMM d, y' }}</span>
+          </div>
+          <div class="field-group">
+            <span class="field-group__label">Premium</span>
+            <span class="field-group__value">{{ detail.premiumAmount | currency }}</span>
+          </div>
+        </div>
+        <div class="coverage-chips">
+          @for (c of detail.coverages; track c.id) {
+            <span class="coverage-chip">{{ c.code }} — {{ c.name }} ({{ c.limitAmount | currency: 'USD':'symbol':'1.0-0' }})</span>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>

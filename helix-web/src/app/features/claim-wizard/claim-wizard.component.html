@@ -1,0 +1,87 @@
+<div class="helix-page wizard-page">
+  <div class="wizard-header">
+    <div>
+      <h1 class="wizard-header__title">File a New Claim</h1>
+      <p class="wizard-header__subtitle">Progress is saved automatically as you move between steps.</p>
+    </div>
+    <div class="wizard-header__actions">
+      @if (draftSavedAt()) {
+        <span class="wizard-header__saved">Draft saved {{ draftSavedAt() | date: 'shortTime' }}</span>
+      }
+      <button mat-stroked-button (click)="saveDraft()">
+        <mat-icon>save</mat-icon>
+        Save draft
+      </button>
+    </div>
+  </div>
+
+  @if (showDraftBanner) {
+    <div class="helix-card draft-banner">
+      <mat-icon>history</mat-icon>
+      <div class="draft-banner__text">
+        <strong>You have a saved draft.</strong>
+        <span>Resume where you left off, or start a fresh claim.</span>
+      </div>
+      <div class="draft-banner__actions">
+        <button mat-button (click)="discardDraft()">Discard</button>
+        <button mat-flat-button color="primary" (click)="resumeDraft()">Resume draft</button>
+      </div>
+    </div>
+  }
+
+  @if (submitError()) {
+    <div class="helix-card wizard-error">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ submitError() }}</span>
+    </div>
+  }
+
+  <mat-stepper
+    class="wizard-stepper helix-card"
+    linear
+    [selectedIndex]="currentStep()"
+    (selectionChange)="onSelectionChange($event)"
+  >
+    <mat-step [label]="stepLabels[0]" [completed]="isStepComplete(0)">
+      <app-wizard-step1-policy></app-wizard-step1-policy>
+    </mat-step>
+    <mat-step [label]="stepLabels[1]" [completed]="isStepComplete(1)">
+      <app-wizard-step2-claimant></app-wizard-step2-claimant>
+    </mat-step>
+    <mat-step [label]="stepLabels[2]" [completed]="isStepComplete(2)">
+      <app-wizard-step3-lines></app-wizard-step3-lines>
+    </mat-step>
+    <mat-step [label]="stepLabels[3]" [completed]="isStepComplete(3)">
+      <app-wizard-step4-documents></app-wizard-step4-documents>
+    </mat-step>
+    <mat-step [label]="stepLabels[4]" [completed]="isStepComplete(4)">
+      <app-wizard-step5-review></app-wizard-step5-review>
+    </mat-step>
+  </mat-stepper>
+
+  <div class="wizard-footer">
+    <button mat-stroked-button (click)="back()" [disabled]="currentStep() === 0 || submitting()">
+      <mat-icon>arrow_back</mat-icon>
+      Back
+    </button>
+    <span class="wizard-footer__spacer"></span>
+    @if (currentStep() < 4) {
+      <button mat-flat-button color="primary" (click)="next()" [disabled]="!canGoNext()">
+        Next
+        <mat-icon>arrow_forward</mat-icon>
+      </button>
+    } @else {
+      <button mat-flat-button color="primary" (click)="submit()" [disabled]="!canGoNext() || submitting()">
+        @if (submitting()) {
+          <mat-spinner diameter="18" class="wizard-footer__spinner"></mat-spinner>
+          Submitting…
+        } @else {
+          <ng-container>
+            <mat-icon>send</mat-icon>
+            Submit Claim
+          </ng-container>
+        }
+      </button>
+    }
+  </div>
+</div>

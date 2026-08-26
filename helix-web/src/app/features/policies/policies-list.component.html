@@ -1,0 +1,116 @@
+<div class="helix-page">
+  <helix-page-header title="Policies" subtitle="Browse active and historical policies. Expand a row to see its coverages."></helix-page-header>
+
+  <div class="helix-card filter-bar">
+    <mat-form-field appearance="outline" class="filter-bar__search" subscriptSizing="dynamic">
+      <mat-icon matPrefix>search</mat-icon>
+      <input matInput placeholder="Search policy #, holder, or product…" [formControl]="searchControl" />
+      @if (searchControl.value) {
+        <button matSuffix mat-icon-button aria-label="Clear search" (click)="searchControl.setValue('')">
+          <mat-icon>close</mat-icon>
+        </button>
+      }
+    </mat-form-field>
+  </div>
+
+  <div class="helix-card table-card">
+    @if (error(); as err) {
+      <helix-empty-state icon="cloud_off" title="Couldn't load policies" [message]="err" variant="error">
+        <button mat-stroked-button (click)="load()">Retry</button>
+      </helix-empty-state>
+    } @else if (!loading() && policies().length === 0) {
+      <helix-empty-state icon="shield" title="No policies found" message="Try a different search term."></helix-empty-state>
+    } @else {
+      <div class="table-scroll">
+        <table mat-table [dataSource]="loading() ? skeletonRows : policies()" multiTemplateDataRows class="policies-table">
+          <ng-container matColumnDef="expand">
+            <th mat-header-cell *matHeaderCellDef></th>
+            <td mat-cell *matCellDef="let p">
+              @if (!loading()) {
+                <button mat-icon-button (click)="toggleExpand(p)" [attr.aria-label]="isExpanded(p) ? 'Collapse' : 'Expand'">
+                  <mat-icon>{{ isExpanded(p) ? 'expand_less' : 'expand_more' }}</mat-icon>
+                </button>
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="policyNumber">
+            <th mat-header-cell *matHeaderCellDef>Policy #</th>
+            <td mat-cell *matCellDef="let p" data-label="Policy #">
+              @if (loading()) { <helix-skeleton width="110px"></helix-skeleton> } @else { <span class="policy-number">{{ p.policyNumber }}</span> }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="holderName">
+            <th mat-header-cell *matHeaderCellDef>Holder</th>
+            <td mat-cell *matCellDef="let p" data-label="Holder">
+              @if (loading()) { <helix-skeleton width="120px"></helix-skeleton> } @else { {{ p.holderName }} }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="productName">
+            <th mat-header-cell *matHeaderCellDef>Product</th>
+            <td mat-cell *matCellDef="let p" data-label="Product">
+              @if (loading()) { <helix-skeleton width="140px"></helix-skeleton> } @else { {{ p.productName }} }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>Status</th>
+            <td mat-cell *matCellDef="let p" data-label="Status">
+              @if (loading()) { <helix-skeleton width="70px"></helix-skeleton> } @else { {{ p.status }} }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="premiumAmount">
+            <th mat-header-cell *matHeaderCellDef>Premium</th>
+            <td mat-cell *matCellDef="let p" data-label="Premium">
+              @if (loading()) { <helix-skeleton width="80px"></helix-skeleton> } @else { {{ p.premiumAmount | currency }}/yr }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="coverageCount">
+            <th mat-header-cell *matHeaderCellDef>Coverages</th>
+            <td mat-cell *matCellDef="let p" data-label="Coverages">
+              @if (loading()) { <helix-skeleton width="30px"></helix-skeleton> } @else { {{ p.coverageCount }} }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="expandedDetail">
+            <td mat-cell *matCellDef="let p" [attr.colspan]="displayedColumns.length" class="expanded-detail-cell">
+              <div class="expanded-detail" [class.expanded-detail--open]="isExpanded(p)">
+                @if (detailLoadingId() === p.id) {
+                  <helix-skeleton height="60px"></helix-skeleton>
+                }
+                @if (details()[p.id]; as detail) {
+                  <div class="coverage-grid">
+                    @for (c of detail.coverages; track c.id) {
+                      <div class="coverage-card">
+                        <div class="coverage-card__code">{{ c.code }}</div>
+                        <div class="coverage-card__name">{{ c.name }}</div>
+                        <div class="coverage-card__row"><span>Limit</span><strong>{{ c.limitAmount | currency: 'USD':'symbol':'1.0-0' }}</strong></div>
+                        <div class="coverage-card__row"><span>Deductible</span><strong>{{ c.deductibleAmount | currency: 'USD':'symbol':'1.0-0' }}</strong></div>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns" class="policy-row" (click)="!loading() && toggleExpand(row)"></tr>
+          <tr mat-row *matRowDef="let row; columns: ['expandedDetail']" class="policy-detail-row"></tr>
+        </table>
+      </div>
+
+      <mat-paginator
+        [length]="totalElements()"
+        [pageSize]="size()"
+        [pageIndex]="page()"
+        [pageSizeOptions]="[10, 20, 50]"
+        (page)="onPage($event)"
+      ></mat-paginator>
+    }
+  </div>
+</div>

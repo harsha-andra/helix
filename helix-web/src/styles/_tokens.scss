@@ -1,0 +1,169 @@
+// -----------------------------------------------------------------------------------------
+// HELIX design tokens
+//
+// Extracted from the Figma "HELIX Insurance Dashboard" design system file — this partial is
+// the bridge between the designer's color ramps, spacing scale, radii, elevation, and type
+// scale and the SCSS/CSS custom properties the rest of the app consumes. Component styles
+// should reach for these tokens (or the Material system-level `--mat-sys-*` variables) rather
+// than hardcoding hex values or magic numbers, so a future re-theme is a one-file change.
+// -----------------------------------------------------------------------------------------
+
+// ---- Spacing scale (4px base unit) -------------------------------------------------------
+:root {
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  // ---- Radii ------------------------------------------------------------------------------
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 999px;
+
+  // ---- Elevation (enterprise-restrained: soft, low-contrast shadows) ---------------------
+  --elevation-0: none;
+  --elevation-1: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.08);
+  --elevation-2: 0 2px 6px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.06);
+  --elevation-3: 0 6px 16px rgba(15, 23, 42, 0.10), 0 2px 4px rgba(15, 23, 42, 0.06);
+  --elevation-4: 0 12px 28px rgba(15, 23, 42, 0.14), 0 4px 8px rgba(15, 23, 42, 0.08);
+
+  // ---- Type scale --------------------------------------------------------------------------
+  --font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-family-mono: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-display: 700 2.25rem/2.75rem var(--font-family-base);
+  --text-h1: 700 1.75rem/2.25rem var(--font-family-base);
+  --text-h2: 600 1.375rem/1.875rem var(--font-family-base);
+  --text-h3: 600 1.125rem/1.5rem var(--font-family-base);
+  --text-body-lg: 400 1rem/1.5rem var(--font-family-base);
+  --text-body: 400 0.875rem/1.375rem var(--font-family-base);
+  --text-body-sm: 400 0.8125rem/1.25rem var(--font-family-base);
+  --text-label: 600 0.75rem/1rem var(--font-family-base);
+  --text-caption: 400 0.6875rem/1rem var(--font-family-base);
+  --tracking-label: 0.03em;
+
+  // ---- Layout --------------------------------------------------------------------------------
+  --sidenav-width: 264px;
+  --sidenav-width-collapsed: 72px;
+  --toolbar-height: 64px;
+  --content-max-width: 1440px;
+
+  // ---- Motion --------------------------------------------------------------------------------
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-slow: 320ms;
+  --motion-ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+// ---- Semantic color roles (light) ---------------------------------------------------------
+// These sit alongside Material's own --mat-sys-* tokens and are used by bespoke components
+// (status chips, the sidenav shell, dashboard cards) that need brand colors Material's
+// component theming doesn't expose directly.
+:root {
+  --helix-surface: #ffffff;
+  --helix-surface-alt: #f7f8fb;
+  --helix-surface-sunken: #eef0f5;
+  --helix-border: #dfe2ea;
+  --helix-border-strong: #c4c8d4;
+  --helix-text: #1b1b1e;
+  --helix-text-muted: #585b66;
+  --helix-text-subtle: #8a8d99;
+
+  --helix-brand: #3443c6;
+  --helix-brand-strong: #283398;
+  --helix-brand-soft: #e3e5f8;
+  --helix-accent: #148f83;
+  --helix-accent-soft: #e0f5f2;
+
+  --helix-shell-bg: #12173a;
+  --helix-shell-fg: #e7e9f7;
+  --helix-shell-fg-muted: #9aa0c8;
+  --helix-shell-active-bg: rgba(255, 255, 255, 0.12);
+  --helix-shell-border: rgba(255, 255, 255, 0.08);
+
+  // Status chip palette — semantically consistent across the whole app.
+  --status-submitted-bg: #e3e5f8;
+  --status-submitted-fg: #283398;
+  --status-under-review-bg: #fff2d6;
+  --status-under-review-fg: #8a5a00;
+  --status-approved-bg: #dcf5e6;
+  --status-approved-fg: #146c39;
+  --status-partially-approved-bg: #e0f5f2;
+  --status-partially-approved-fg: #146058;
+  --status-denied-bg: #fbe1e1;
+  --status-denied-fg: #971d1d;
+  --status-paid-bg: #dbeafe;
+  --status-paid-fg: #1e4c8f;
+  --status-closed-bg: #eceef1;
+  --status-closed-fg: #4b4f5a;
+
+  --helix-success: #1a8a4a;
+  --helix-warning: #b06f00;
+  --helix-danger: #ba1a1a;
+  --helix-info: #1e4c8f;
+}
+
+// ---- Dark theme overrides ------------------------------------------------------------------
+@mixin helix-dark-tokens {
+  --helix-surface: #16181f;
+  --helix-surface-alt: #1c1f28;
+  --helix-surface-sunken: #10121a;
+  --helix-border: #2b2e3a;
+  --helix-border-strong: #3a3e4d;
+  --helix-text: #e7e9f2;
+  --helix-text-muted: #a6a9b8;
+  --helix-text-subtle: #7c7f8f;
+
+  --helix-brand: #aeb4e9;
+  --helix-brand-strong: #c8ccf1;
+  --helix-brand-soft: #222c56;
+  --helix-accent: #6bd4c8;
+  --helix-accent-soft: #12332f;
+
+  --helix-shell-bg: #0b0e26;
+  --helix-shell-fg: #e7e9f7;
+  --helix-shell-fg-muted: #8b91bd;
+  --helix-shell-active-bg: rgba(255, 255, 255, 0.10);
+  --helix-shell-border: rgba(255, 255, 255, 0.08);
+
+  --status-submitted-bg: #222c56;
+  --status-submitted-fg: #b7bdef;
+  --status-under-review-bg: #47380f;
+  --status-under-review-fg: #f2c25e;
+  --status-approved-bg: #0f3a22;
+  --status-approved-fg: #6fdb9c;
+  --status-partially-approved-bg: #12332f;
+  --status-partially-approved-fg: #6bd4c8;
+  --status-denied-bg: #431515;
+  --status-denied-fg: #ff9d9d;
+  --status-paid-bg: #16294a;
+  --status-paid-fg: #8fb8f2;
+  --status-closed-bg: #262a33;
+  --status-closed-fg: #c4c6cf;
+
+  --helix-success: #4ade80;
+  --helix-warning: #f2c25e;
+  --helix-danger: #ff6b6b;
+  --helix-info: #8fb8f2;
+}
+
+:root[data-theme='dark'] {
+  @include helix-dark-tokens;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    @include helix-dark-tokens;
+  }
+}

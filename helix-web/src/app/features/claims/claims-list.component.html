@@ -1,0 +1,164 @@
+<div class="helix-page">
+  <helix-page-header title="Claims" subtitle="Search, filter, and triage the full claims queue.">
+    <a mat-flat-button color="primary" routerLink="/claims/new">
+      <mat-icon>add</mat-icon>
+      New Claim
+    </a>
+  </helix-page-header>
+
+  <div class="helix-card filter-bar">
+    <mat-form-field appearance="outline" class="filter-bar__search" subscriptSizing="dynamic">
+      <mat-icon matPrefix>search</mat-icon>
+      <input matInput placeholder="Search claim #, claimant, policy, adjuster…" [formControl]="searchControl" />
+      @if (searchControl.value) {
+        <button matSuffix mat-icon-button aria-label="Clear search" (click)="searchControl.setValue('')">
+          <mat-icon>close</mat-icon>
+        </button>
+      }
+    </mat-form-field>
+
+    <mat-chip-listbox multiple aria-label="Filter by status" class="filter-bar__chips">
+      @for (s of statuses; track s) {
+        <mat-chip-option
+          [selected]="activeStatuses().has(s)"
+          (selectionChange)="onStatusToggle(s, $event.selected)"
+        >
+          {{ s | statusLabel }}
+        </mat-chip-option>
+      }
+    </mat-chip-listbox>
+
+    @if (activeStatuses().size || searchControl.value) {
+      <button mat-button (click)="clearFilters()">
+        <mat-icon>filter_alt_off</mat-icon>
+        Clear filters
+      </button>
+    }
+  </div>
+
+  <div class="helix-card table-card">
+    @if (error(); as err) {
+      <helix-empty-state icon="cloud_off" title="Couldn't load claims" [message]="err" variant="error">
+        <button mat-stroked-button (click)="retry()">
+          <mat-icon>refresh</mat-icon>
+          Retry
+        </button>
+      </helix-empty-state>
+    } @else if (!loading() && claims().length === 0) {
+      <helix-empty-state
+        icon="fact_check"
+        title="No claims match your filters"
+        message="Try clearing the search term or status filters."
+      >
+        <button mat-stroked-button (click)="clearFilters()">Clear filters</button>
+      </helix-empty-state>
+    } @else {
+      <div class="table-scroll">
+        <table
+          mat-table
+          [dataSource]="loading() ? skeletonRows : claims()"
+          matSort
+          [matSortActive]="sortActive()"
+          [matSortDirection]="sortDirection()"
+          (matSortChange)="onSort($event)"
+          class="claims-table"
+        >
+          <ng-container matColumnDef="claimNumber">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Claim #</th>
+            <td mat-cell *matCellDef="let c" data-label="Claim #">
+              @if (loading()) {
+                <helix-skeleton width="100px"></helix-skeleton>
+              } @else {
+                <span class="claim-number">{{ c.claimNumber }}</span>
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="claimantName">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Claimant</th>
+            <td mat-cell *matCellDef="let c" data-label="Claimant">
+              @if (loading()) {
+                <helix-skeleton width="120px"></helix-skeleton>
+              } @else {
+                {{ c.claimantName }}
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="policyNumber">
+            <th mat-header-cell *matHeaderCellDef>Policy</th>
+            <td mat-cell *matCellDef="let c" data-label="Policy">
+              @if (loading()) {
+                <helix-skeleton width="110px"></helix-skeleton>
+              } @else {
+                {{ c.policyNumber }}
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Status</th>
+            <td mat-cell *matCellDef="let c" data-label="Status">
+              @if (loading()) {
+                <helix-skeleton width="90px" height="22px" radius="var(--radius-full)"></helix-skeleton>
+              } @else {
+                <helix-status-chip [status]="c.status"></helix-status-chip>
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="totalAmount">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Amount</th>
+            <td mat-cell *matCellDef="let c" data-label="Amount">
+              @if (loading()) {
+                <helix-skeleton width="70px"></helix-skeleton>
+              } @else {
+                {{ c.totalAmount | currency: 'USD':'symbol':'1.0-0' }}
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="incidentDate">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Incident Date</th>
+            <td mat-cell *matCellDef="let c" data-label="Incident Date">
+              @if (loading()) {
+                <helix-skeleton width="90px"></helix-skeleton>
+              } @else {
+                {{ c.incidentDate | date: 'MMM d, y' }}
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="assignedAdjuster">
+            <th mat-header-cell *matHeaderCellDef>Adjuster</th>
+            <td mat-cell *matCellDef="let c" data-label="Adjuster">
+              @if (loading()) {
+                <helix-skeleton width="100px"></helix-skeleton>
+              } @else {
+                {{ c.assignedAdjuster ?? '—' }}
+              }
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr
+            mat-row
+            *matRowDef="let row; columns: displayedColumns"
+            class="claims-table__row"
+            [class.claims-table__row--skeleton]="loading()"
+            (click)="!loading() && openClaim(row)"
+          ></tr>
+        </table>
+      </div>
+
+      <mat-paginator
+        [length]="totalElements()"
+        [pageSize]="query().size"
+        [pageIndex]="query().page"
+        [pageSizeOptions]="[10, 20, 50]"
+        (page)="onPage($event)"
+        aria-label="Select claims page"
+      ></mat-paginator>
+    }
+  </div>
+</div>

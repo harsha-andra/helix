@@ -1,0 +1,62 @@
+// -----------------------------------------------------------------------------------------
+// HELIX Angular Material M3 theme, built entirely from ./_m3-palettes.scss tone maps —
+// i.e. from the tokens extracted from the Figma insurance dashboard design system, never
+// from Material's stock palettes. Runtime light/dark switching is done by toggling
+// [data-theme] on <html> (see ThemeService), so the dark variant is applied via
+// `all-component-colors` scoped to that attribute rather than a prefers-color-scheme query.
+// -----------------------------------------------------------------------------------------
+@use '@angular/material' as mat;
+@use './m3-palettes' as palettes;
+
+// Note: Sass emits a harmless "same color styles generated multiple times" build warning
+// below — expected and unavoidable here, since the dark variant deliberately re-emits color
+// tokens scoped under [data-theme='dark'] so the toggle can flip at runtime instead of only
+// via prefers-color-scheme. See https://material.angular.dev/guide/duplicate-theming-styles.
+
+$helix-typography: (
+  brand-family: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  plain-family: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  bold-weight: 700,
+  medium-weight: 600,
+  regular-weight: 400,
+);
+
+$helix-light-theme: mat.define-theme((
+  color: (
+    theme-type: light,
+    primary: palettes.$helix-primary-palette,
+    tertiary: palettes.$helix-tertiary-palette,
+  ),
+  typography: $helix-typography,
+  density: (
+    scale: 0,
+  ),
+));
+
+$helix-dark-theme: mat.define-theme((
+  color: (
+    theme-type: dark,
+    primary: palettes.$helix-primary-palette,
+    tertiary: palettes.$helix-tertiary-palette,
+  ),
+  typography: $helix-typography,
+  density: (
+    scale: 0,
+  ),
+));
+
+@include mat.core();
+
+:root {
+  @include mat.all-component-themes($helix-light-theme);
+}
+
+:root[data-theme='dark'] {
+  @include mat.all-component-colors($helix-dark-theme);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    @include mat.all-component-colors($helix-dark-theme);
+  }
+}

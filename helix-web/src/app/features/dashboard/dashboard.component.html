@@ -1,0 +1,101 @@
+<div class="helix-page">
+  <helix-page-header title="Dashboard" subtitle="Live snapshot of claims operations across the book.">
+    <a mat-flat-button color="primary" routerLink="/claims/new">
+      <mat-icon>add</mat-icon>
+      New Claim
+    </a>
+  </helix-page-header>
+
+  @if (error(); as err) {
+    <div class="helix-card">
+      <helix-empty-state icon="cloud_off" title="Something went wrong" [message]="err" variant="error">
+        <button mat-stroked-button (click)="load()">
+          <mat-icon>refresh</mat-icon>
+          Retry
+        </button>
+      </helix-empty-state>
+    </div>
+  } @else {
+    <section class="kpi-grid">
+      @if (loading()) {
+        @for (i of [0, 1, 2, 3]; track i) {
+          <div class="kpi-card helix-card">
+            <helix-skeleton width="40px" height="40px" radius="var(--radius-md)"></helix-skeleton>
+            <helix-skeleton width="70%" height="28px"></helix-skeleton>
+            <helix-skeleton width="90%" height="14px"></helix-skeleton>
+          </div>
+        }
+      } @else {
+        @for (kpi of kpis(); track kpi.label) {
+          <div class="kpi-card helix-card">
+            <div class="kpi-card__icon">
+              <mat-icon>{{ kpi.icon }}</mat-icon>
+            </div>
+            <div class="kpi-card__value">{{ kpi.value }}</div>
+            <div class="kpi-card__label">{{ kpi.label }}</div>
+            <div class="kpi-card__hint">{{ kpi.hint }}</div>
+          </div>
+        }
+      }
+    </section>
+
+    <section class="dashboard-grid">
+      <div class="helix-card panel">
+        <div class="panel__header">
+          <h2 class="panel__title">Claims by Status</h2>
+          <a routerLink="/claims" class="panel__link">View all claims</a>
+        </div>
+
+        @if (loading()) {
+          <div class="status-breakdown">
+            @for (i of [0, 1, 2, 3, 4]; track i) {
+              <helix-skeleton height="28px"></helix-skeleton>
+            }
+          </div>
+        } @else {
+          <div class="status-breakdown" role="img" aria-label="Bar chart of claim counts by status">
+            @for (row of summary()?.byStatus; track row.status) {
+              <div class="status-row">
+                <span class="status-row__label">{{ row.status | statusLabel }}</span>
+                <div class="status-row__track">
+                  <div class="status-row__bar" [style.width]="barWidth(row.count)" [style.background]="barColor(row.status)"></div>
+                </div>
+                <span class="status-row__count">{{ row.count }}</span>
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      <div class="helix-card panel">
+        <div class="panel__header">
+          <h2 class="panel__title">Recent Activity</h2>
+        </div>
+
+        @if (loading()) {
+          <div class="activity-list">
+            @for (i of [0, 1, 2, 3]; track i) {
+              <helix-skeleton height="40px"></helix-skeleton>
+            }
+          </div>
+        } @else if (!summary()?.recentActivity?.length) {
+          <helix-empty-state icon="history" title="No recent activity" message="Activity will appear here as claims move through the workflow."></helix-empty-state>
+        } @else {
+          <ul class="activity-list">
+            @for (event of summary()?.recentActivity; track event.id) {
+              <li class="activity-item">
+                <span class="activity-item__icon">
+                  <mat-icon>{{ actionIcon(event.action) }}</mat-icon>
+                </span>
+                <div class="activity-item__body">
+                  <p class="activity-item__detail">{{ event.detail }}</p>
+                  <p class="activity-item__meta">{{ event.actor }} · {{ event.occurredAt | relativeTime }}</p>
+                </div>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    </section>
+  }
+</div>

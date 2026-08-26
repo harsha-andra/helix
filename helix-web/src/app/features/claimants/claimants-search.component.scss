@@ -1,0 +1,54 @@
+.search-panel {
+  padding: var(--space-4);
+}
+
+.search-panel__field {
+  width: 100%;
+}
+
+.claimant-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-4);
+}
+
+.claimant-card {
+  padding: var(--space-4);
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.claimant-card__avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--helix-brand-soft);
+  color: var(--helix-brand-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.claimant-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.claimant-card__name {
+  font: var(--text-body);
+  font-weight: 600;
+  color: var(--helix-text);
+}
+
+.claimant-card__detail {
+  font: var(--text-body-sm);
+  color: var(--helix-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

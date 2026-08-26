@@ -1,0 +1,141 @@
+@use './styles/tokens';
+@use './styles/theme';
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap');
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font: var(--text-body);
+  color: var(--helix-text);
+  background: var(--helix-surface-alt);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--helix-brand);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--helix-border-strong);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+// Utility classes shared across feature modules -------------------------------------------
+.helix-page {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+
+  @media (max-width: 599px) {
+    padding: var(--space-4);
+    gap: var(--space-4);
+  }
+}
+
+.helix-card {
+  background: var(--helix-surface);
+  border: 1px solid var(--helix-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-1);
+}
+
+.helix-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+// Snackbar variants ------------------------------------------------------------------------
+.helix-snackbar-success .mdc-snackbar__surface {
+  background: var(--helix-success) !important;
+}
+
+.helix-snackbar-error .mdc-snackbar__surface {
+  background: var(--helix-danger) !important;
+}
+
+// Status chip ----------------------------------------------------------------------------
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-full);
+  font: var(--text-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+  line-height: 1.6;
+}
+
+.status-chip::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-chip--submitted {
+  background: var(--status-submitted-bg);
+  color: var(--status-submitted-fg);
+}
+.status-chip--under-review {
+  background: var(--status-under-review-bg);
+  color: var(--status-under-review-fg);
+}
+.status-chip--approved {
+  background: var(--status-approved-bg);
+  color: var(--status-approved-fg);
+}
+.status-chip--partially-approved {
+  background: var(--status-partially-approved-bg);
+  color: var(--status-partially-approved-fg);
+}
+.status-chip--denied {
+  background: var(--status-denied-bg);
+  color: var(--status-denied-fg);
+}
+.status-chip--paid {
+  background: var(--status-paid-bg);
+  color: var(--status-paid-fg);
+}
+.status-chip--closed {
+  background: var(--status-closed-bg);
+  color: var(--status-closed-fg);
+}

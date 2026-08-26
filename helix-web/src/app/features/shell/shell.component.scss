@@ -1,0 +1,231 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.shell {
+  height: 100%;
+}
+
+.shell__sidenav {
+  width: var(--sidenav-width);
+  background: var(--helix-shell-bg);
+  color: var(--helix-shell-fg);
+  border-right: none;
+  display: flex;
+  flex-direction: column;
+  transition: width var(--motion-base) var(--motion-ease);
+  overflow-x: hidden;
+
+  &--collapsed {
+    width: var(--sidenav-width-collapsed);
+  }
+}
+
+.shell__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-5);
+  height: var(--toolbar-height);
+}
+
+.shell__brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--helix-brand, #3443c6), #148f83);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.shell__brand-name {
+  font: var(--text-h3);
+  letter-spacing: 0.04em;
+  color: #fff;
+}
+
+.shell__nav {
+  flex: 1;
+  padding-top: var(--space-2);
+
+  ::ng-deep .mat-mdc-list-item {
+    color: var(--helix-shell-fg-muted);
+    border-radius: var(--radius-sm);
+    margin: 2px var(--space-2);
+    width: calc(100% - #{var(--space-4)});
+  }
+}
+
+.shell__nav-item {
+  ::ng-deep .mdc-list-item__primary-text {
+    color: inherit;
+  }
+
+  &--active {
+    background: var(--helix-shell-active-bg);
+    ::ng-deep .mat-mdc-list-item {
+      color: #fff;
+    }
+    ::ng-deep .mat-icon {
+      color: #fff;
+    }
+  }
+}
+
+.shell__sidenav-footer {
+  padding: var(--space-3);
+  border-top: 1px solid var(--helix-shell-border);
+  display: flex;
+  justify-content: flex-end;
+
+  button {
+    color: var(--helix-shell-fg-muted);
+  }
+}
+
+.shell__content {
+  display: flex;
+  flex-direction: column;
+  background: var(--helix-surface-alt);
+}
+
+.shell__toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--helix-surface);
+  border-bottom: 1px solid var(--helix-border);
+  gap: var(--space-3);
+  height: var(--toolbar-height);
+}
+
+.shell__breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font: var(--text-body-sm);
+  color: var(--helix-text-muted);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.shell__breadcrumb-item--current {
+  color: var(--helix-text);
+  font-weight: 600;
+}
+
+.shell__breadcrumb-sep {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.shell__spacer {
+  flex: 1 1 auto;
+}
+
+.shell__search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--helix-surface-sunken);
+  border: 1px solid var(--helix-border);
+  border-radius: var(--radius-full);
+  padding: 6px var(--space-4);
+  color: var(--helix-text-subtle);
+  width: 320px;
+  max-width: 40vw;
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.shell__search-input {
+  border: none;
+  background: transparent;
+  outline: none;
+  color: var(--helix-text);
+  font: var(--text-body-sm);
+  width: 100%;
+
+  &::placeholder {
+    color: var(--helix-text-subtle);
+  }
+}
+
+.shell__avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--helix-brand-soft);
+  color: var(--helix-brand-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  margin-right: var(--space-2);
+}
+
+.shell__user-trigger {
+  display: inline-flex;
+  align-items: center;
+}
+
+.shell__user-name {
+  margin-right: var(--space-1);
+  font: var(--text-body-sm);
+}
+
+.shell__menu-header {
+  padding: var(--space-2) var(--space-4);
+  font: var(--text-label);
+  color: var(--helix-text-subtle);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.shell__menu-subtext {
+  font: var(--text-caption);
+  color: var(--helix-text-subtle);
+  font-weight: 400;
+}
+
+.shell__notification {
+  display: flex !important;
+  flex-direction: column;
+  align-items: flex-start !important;
+  height: auto !important;
+  padding: var(--space-2) var(--space-4) !important;
+  line-height: 1.3;
+  white-space: normal;
+  opacity: 1 !important;
+}
+
+.shell__notification-title {
+  font: var(--text-body-sm);
+  color: var(--helix-text);
+}
+
+.shell__notification-time {
+  font: var(--text-caption);
+  color: var(--helix-text-subtle);
+}
+
+.shell__main {
+  flex: 1;
+}
+
+@media (max-width: 599px) {
+  .shell__search {
+    display: none;
+  }
+}

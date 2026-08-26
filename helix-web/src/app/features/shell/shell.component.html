@@ -1,0 +1,116 @@
+<mat-sidenav-container class="shell">
+  <mat-sidenav
+    class="shell__sidenav"
+    [class.shell__sidenav--collapsed]="collapsed() && !isHandset()"
+    [mode]="sidenavMode()"
+    [opened]="sidenavOpened()"
+    #sidenav
+  >
+    <div class="shell__brand">
+      <div class="shell__brand-mark">H</div>
+      @if (!collapsed() || isHandset()) {
+        <span class="shell__brand-name">HELIX</span>
+      }
+    </div>
+
+    <mat-nav-list class="shell__nav">
+      @for (item of navItems; track item.route) {
+        <a
+          mat-list-item
+          class="shell__nav-item"
+          [routerLink]="item.route"
+          routerLinkActive="shell__nav-item--active"
+          [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' }"
+          [matTooltip]="collapsed() && !isHandset() ? item.label : ''"
+          matTooltipPosition="right"
+          (click)="isHandset() && sidenav.close()"
+        >
+          <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+          @if (!collapsed() || isHandset()) {
+            <span matListItemTitle>{{ item.label }}</span>
+          }
+        </a>
+      }
+    </mat-nav-list>
+
+    <div class="shell__sidenav-footer">
+      <button mat-icon-button (click)="toggleCollapsed()" *ngIf="!isHandset()" [matTooltip]="collapsed() ? 'Expand' : 'Collapse'">
+        <mat-icon>{{ collapsed() ? 'chevron_right' : 'chevron_left' }}</mat-icon>
+      </button>
+    </div>
+  </mat-sidenav>
+
+  <mat-sidenav-content class="shell__content">
+    <mat-toolbar class="shell__toolbar">
+      @if (isHandset()) {
+        <button mat-icon-button (click)="sidenav.toggle()" aria-label="Toggle navigation">
+          <mat-icon>menu</mat-icon>
+        </button>
+      }
+
+      <nav class="shell__breadcrumb" aria-label="Breadcrumb">
+        @for (crumb of breadcrumbs(); track crumb.label; let last = $last) {
+          <span class="shell__breadcrumb-item" [class.shell__breadcrumb-item--current]="last">{{ crumb.label }}</span>
+          @if (!last) {
+            <mat-icon class="shell__breadcrumb-sep">chevron_right</mat-icon>
+          }
+        }
+      </nav>
+
+      <span class="shell__spacer"></span>
+
+      <div class="shell__search">
+        <mat-icon>search</mat-icon>
+        <input
+          class="shell__search-input"
+          type="text"
+          placeholder="Search claims, policies, claimants…"
+          [(ngModel)]="searchTerm"
+          (keyup.enter)="runSearch()"
+          aria-label="Global search"
+        />
+      </div>
+
+      <button mat-icon-button (click)="theme.toggle()" [matTooltip]="theme.mode() === 'dark' ? 'Switch to light' : 'Switch to dark'">
+        <mat-icon>{{ theme.mode() === 'dark' ? 'light_mode' : 'dark_mode' }}</mat-icon>
+      </button>
+
+      <button mat-icon-button [matMenuTriggerFor]="notifMenu" matTooltip="Notifications" [matBadge]="notifications.length" matBadgeSize="small" matBadgeColor="warn">
+        <mat-icon>notifications</mat-icon>
+      </button>
+      <mat-menu #notifMenu="matMenu" class="shell__menu-panel">
+        <div class="shell__menu-header">Notifications</div>
+        @for (n of notifications; track n.title) {
+          <button mat-menu-item disabled class="shell__notification">
+            <span class="shell__notification-title">{{ n.title }}</span>
+            <span class="shell__notification-time">{{ n.time }}</span>
+          </button>
+        }
+      </mat-menu>
+
+      <button mat-button [matMenuTriggerFor]="userMenu" class="shell__user-trigger">
+        <span class="shell__avatar">{{ (auth.user()?.name ?? '?').charAt(0) }}</span>
+        @if (!isHandset()) {
+          <span class="shell__user-name">{{ auth.user()?.name }}</span>
+        }
+        <mat-icon>arrow_drop_down</mat-icon>
+      </button>
+      <mat-menu #userMenu="matMenu">
+        <div class="shell__menu-header">
+          {{ auth.user()?.name }}
+          <div class="shell__menu-subtext">{{ auth.user()?.email }}</div>
+          <div class="shell__menu-subtext">Role: {{ auth.user()?.role }}</div>
+        </div>
+        <mat-divider></mat-divider>
+        <button mat-menu-item (click)="logout()">
+          <mat-icon>logout</mat-icon>
+          <span>Log out</span>
+        </button>
+      </mat-menu>
+    </mat-toolbar>
+
+    <main class="shell__main">
+      <router-outlet></router-outlet>
+    </main>
+  </mat-sidenav-content>
+</mat-sidenav-container>

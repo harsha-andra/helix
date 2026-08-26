@@ -1,0 +1,75 @@
+<div class="step">
+  <div>
+    <h3 class="step-section-title">Claim lines</h3>
+    <p class="step__hint">Add at least one line, matched against a coverage on the selected policy.</p>
+  </div>
+
+  @if (!policy()) {
+    <helix-empty-state icon="policy" title="Select a policy first" message="Go back to step 1 to choose a policy before adding claim lines."></helix-empty-state>
+  } @else if (lines().length === 0) {
+    <helix-empty-state icon="receipt_long" title="No claim lines yet" message="Add a line for each item or coverage being claimed.">
+      <button mat-flat-button color="primary" (click)="addLine()">
+        <mat-icon>add</mat-icon>
+        Add line
+      </button>
+    </helix-empty-state>
+  } @else {
+    <div class="table-scroll">
+      <table class="lines-table">
+        <thead>
+          <tr>
+            <th style="width: 40px">#</th>
+            <th style="width: 220px">Coverage</th>
+            <th>Description</th>
+            <th style="width: 140px">Claimed amount</th>
+            <th style="width: 48px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (line of lines(); track line.tempId; let i = $index) {
+            <tr>
+              <td>{{ i + 1 }}</td>
+              <td>
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" style="width: 100%">
+                  <mat-select [value]="line.coverageCode" (selectionChange)="setCoverage(line.tempId, $event.value)">
+                    @for (c of coverages(); track c.code) {
+                      <mat-option [value]="c.code">{{ c.code }} — {{ c.name }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+              </td>
+              <td>
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" style="width: 100%">
+                  <input matInput [value]="line.description" (change)="setDescription(line.tempId, $event)" placeholder="e.g. Bumper replacement" />
+                </mat-form-field>
+              </td>
+              <td>
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" style="width: 100%">
+                  <span matPrefix>$&nbsp;</span>
+                  <input matInput type="number" min="0" [value]="line.claimedAmount ?? ''" (change)="setAmount(line.tempId, $event)" />
+                </mat-form-field>
+              </td>
+              <td>
+                <button mat-icon-button color="warn" (click)="removeLine(line.tempId)" aria-label="Remove line">
+                  <mat-icon>delete_outline</mat-icon>
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="lines-total">
+      <span>Total claimed:</span>
+      <strong>{{ total() | currency }}</strong>
+    </div>
+
+    <div>
+      <button mat-stroked-button (click)="addLine()">
+        <mat-icon>add</mat-icon>
+        Add another line
+      </button>
+    </div>
+  }
+</div>

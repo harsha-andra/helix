@@ -1,0 +1,102 @@
+.filter-bar {
+  padding: var(--space-4);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.filter-bar__search {
+  flex: 1 1 280px;
+  min-width: 220px;
+}
+
+.filter-bar__chips {
+  flex: 2 1 auto;
+}
+
+.table-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.claims-table {
+  width: 100%;
+}
+
+.claim-number {
+  font-weight: 600;
+  color: var(--helix-brand);
+}
+
+.claims-table__row {
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--motion-ease);
+
+  &:hover {
+    background: var(--helix-surface-alt);
+  }
+
+  &--skeleton {
+    cursor: default;
+    &:hover {
+      background: transparent;
+    }
+  }
+}
+
+mat-paginator {
+  border-top: 1px solid var(--helix-border);
+}
+
+// Responsive: reflow the table into stacked cards below 720px, all the way to 360px.
+@media (max-width: 720px) {
+  .claims-table {
+    display: block;
+
+    thead {
+      display: none;
+    }
+
+    tbody,
+    tr {
+      display: block;
+      width: 100%;
+    }
+
+    tr.claims-table__row {
+      border: 1px solid var(--helix-border);
+      border-radius: var(--radius-md);
+      margin-bottom: var(--space-3);
+      padding: var(--space-2) var(--space-4);
+      background: var(--helix-surface);
+    }
+
+    td {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding: var(--space-2) 0;
+      border-bottom: 1px dashed var(--helix-border);
+      text-align: right;
+
+      &:last-child {
+        border-bottom: none;
+      }
+
+      &::before {
+        content: attr(data-label);
+        font: var(--text-label);
+        color: var(--helix-text-subtle);
+        text-transform: none;
+        letter-spacing: normal;
+        text-align: left;
+      }
+    }
+  }
+}

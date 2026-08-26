@@ -1,0 +1,34 @@
+<div class="step">
+  <div>
+    <h3 class="step-section-title">Supporting documents</h3>
+    <p class="step__hint">Optional — attach photos, estimates, or reports. Simulated in demo mode (metadata only).</p>
+  </div>
+
+  <div
+    class="doc-dropzone"
+    [class.doc-dropzone--active]="dragOver()"
+    (drop)="onDrop($event)"
+    (dragover)="onDragOver($event)"
+    (dragleave)="onDragLeave()"
+  >
+    <mat-icon>cloud_upload</mat-icon>
+    <p>Drag files here, or</p>
+    <button mat-stroked-button type="button" (click)="browse()">Browse files</button>
+    <input #fileInput type="file" multiple hidden (change)="onFilesSelected($event)" />
+  </div>
+
+  @if (documents().length > 0) {
+    <div class="doc-list">
+      @for (doc of documents(); track doc.tempId) {
+        <div class="doc-item">
+          <mat-icon class="doc-item__icon">{{ iconFor(doc.contentType) }}</mat-icon>
+          <span class="doc-item__name">{{ doc.fileName }}</span>
+          <span class="doc-item__size">{{ formatBytes(doc.sizeBytes) }}</span>
+          <button mat-icon-button (click)="removeDocument(doc.tempId)" aria-label="Remove document">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      }
+    </div>
+  }
+</div>

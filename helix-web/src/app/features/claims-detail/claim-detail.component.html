@@ -1,0 +1,177 @@
+<div class="helix-page">
+  <button mat-button class="back-link" (click)="back()">
+    <mat-icon>arrow_back</mat-icon>
+    Back to claims
+  </button>
+
+  @if (error(); as err) {
+    <div class="helix-card">
+      <helix-empty-state icon="cloud_off" title="Couldn't load this claim" [message]="err" variant="error">
+        <button mat-stroked-button (click)="load()">
+          <mat-icon>refresh</mat-icon>
+          Retry
+        </button>
+      </helix-empty-state>
+    </div>
+  } @else if (loading()) {
+    <div class="helix-card detail-header">
+      <helix-skeleton width="220px" height="28px"></helix-skeleton>
+      <helix-skeleton width="140px" height="24px" radius="var(--radius-full)"></helix-skeleton>
+      <helix-skeleton width="120px" height="28px"></helix-skeleton>
+    </div>
+  } @else {
+  @if (claim(); as c) {
+    <div class="helix-card detail-header">
+      <div class="detail-header__main">
+        <div class="detail-header__title-row">
+          <h1 class="detail-header__claim-number">{{ c.claimNumber }}</h1>
+          <helix-status-chip [status]="c.status"></helix-status-chip>
+        </div>
+        <p class="detail-header__meta">
+          Policy {{ c.policyNumber }} · Claimant {{ c.claimantName }} · Submitted {{ c.submittedAt | date: 'MMM d, y' }}
+        </p>
+      </div>
+
+      <div class="detail-header__amount">
+        <span class="detail-header__amount-label">Total claimed</span>
+        <span class="detail-header__amount-value">{{ c.totalAmount | currency }}</span>
+      </div>
+
+      <div class="detail-header__actions">
+        <button
+          mat-flat-button
+          color="primary"
+          [matMenuTriggerFor]="statusMenu"
+          [disabled]="!canChangeStatus() || nextStatuses(c.status).length === 0 || statusUpdating()"
+          [matTooltip]="!canChangeStatus() ? 'Only adjusters can change claim status' : ''"
+        >
+          @if (statusUpdating()) {
+            Updating…
+          } @else {
+            <ng-container>
+              Change Status
+              <mat-icon>arrow_drop_down</mat-icon>
+            </ng-container>
+          }
+        </button>
+        <mat-menu #statusMenu="matMenu">
+          @for (s of nextStatuses(c.status); track s) {
+            <button mat-menu-item (click)="changeStatus(s)">{{ s | statusLabel }}</button>
+          }
+        </mat-menu>
+      </div>
+    </div>
+
+    <div class="helix-card tabs-card">
+      <mat-tab-group animationDuration="150ms">
+        <mat-tab label="Overview">
+          <div class="tab-panel overview-grid">
+            <div class="overview-block">
+              <h3>Policy</h3>
+              <dl>
+                <div><dt>Policy #</dt><dd>{{ c.policy.policyNumber }}</dd></div>
+                <div><dt>Product</dt><dd>{{ c.policy.productName }}</dd></div>
+                <div><dt>Holder</dt><dd>{{ c.policy.holderName }}</dd></div>
+                <div><dt>Status</dt><dd>{{ c.policy.status }}</dd></div>
+              </dl>
+            </div>
+            <div class="overview-block">
+              <h3>Claimant</h3>
+              <dl>
+                <div><dt>Name</dt><dd>{{ c.claimant.firstName }} {{ c.claimant.lastName }}</dd></div>
+                <div><dt>Email</dt><dd>{{ c.claimant.email }}</dd></div>
+                <div><dt>Phone</dt><dd>{{ c.claimant.phone }}</dd></div>
+                <div><dt>Location</dt><dd>{{ c.claimant.city }}, {{ c.claimant.state }}</dd></div>
+              </dl>
+            </div>
+            <div class="overview-block">
+              <h3>Assignment</h3>
+              <dl>
+                <div><dt>Adjuster</dt><dd>{{ c.adjuster?.name ?? 'Unassigned' }}</dd></div>
+                <div><dt>Incident date</dt><dd>{{ c.incidentDate | date: 'MMM d, y' }}</dd></div>
+                <div><dt>Version</dt><dd>{{ c.version }}</dd></div>
+              </dl>
+            </div>
+            <div class="overview-block overview-block--wide">
+              <h3>Description</h3>
+              <p>{{ c.description }}</p>
+            </div>
+          </div>
+        </mat-tab>
+
+        <mat-tab label="Claim Lines ({{ c.lines.length }})">
+          <div class="tab-panel">
+            <div class="table-scroll">
+              <table class="lines-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Coverage</th>
+                    <th>Description</th>
+                    <th>Claimed</th>
+                    <th>Approved</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (line of c.lines; track line.id) {
+                    <tr>
+                      <td>{{ line.lineNumber }}</td>
+                      <td>{{ line.coverageCode }}</td>
+                      <td>{{ line.description }}</td>
+                      <td>{{ line.claimedAmount | currency }}</td>
+                      <td>{{ line.approvedAmount != null ? (line.approvedAmount | currency) : '—' }}</td>
+                      <td><helix-status-chip [status]="line.status"></helix-status-chip></td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </mat-tab>
+
+        <mat-tab label="Documents ({{ c.documents.length }})">
+          <div class="tab-panel">
+            @if (c.documents.length === 0) {
+              <helix-empty-state icon="folder_off" title="No documents" message="No documents were attached to this claim."></helix-empty-state>
+            } @else {
+              <div class="doc-list">
+                @for (doc of c.documents; track doc.id) {
+                  <div class="doc-item">
+                    <mat-icon class="doc-item__icon">{{ documentIcon(doc.contentType) }}</mat-icon>
+                    <span class="doc-item__name">{{ doc.fileName }}</span>
+                    <span class="doc-item__size">{{ formatBytes(doc.sizeBytes) }}</span>
+                    <span class="doc-item__date">{{ doc.uploadedAt | date: 'MMM d, y' }}</span>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </mat-tab>
+
+        <mat-tab label="Audit Trail">
+          <div class="tab-panel">
+            @if (auditLoading()) {
+              <helix-skeleton height="80px"></helix-skeleton>
+            } @else if (audit().length === 0) {
+              <helix-empty-state icon="history" title="No audit events" message="Nothing has been recorded for this claim yet."></helix-empty-state>
+            } @else {
+              <ul class="audit-timeline">
+                @for (event of audit(); track event.id) {
+                  <li class="audit-item">
+                    <span class="audit-item__icon"><mat-icon>{{ auditIcon(event.action) }}</mat-icon></span>
+                    <div class="audit-item__body">
+                      <p class="audit-item__detail">{{ event.detail }}</p>
+                      <p class="audit-item__meta">{{ event.actor }} · {{ event.occurredAt | date: 'MMM d, y, h:mm a' }} · {{ event.occurredAt | relativeTime }}</p>
+                    </div>
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+        </mat-tab>
+      </mat-tab-group>
+    </div>
+  }
+  }
+</div>

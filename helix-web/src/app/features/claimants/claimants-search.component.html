@@ -1,0 +1,33 @@
+<div class="helix-page">
+  <helix-page-header title="Claimants" subtitle="Search the claimant directory by name, email, or city."></helix-page-header>
+
+  <div class="helix-card search-panel">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search-panel__field">
+      <mat-icon matPrefix>search</mat-icon>
+      <input matInput placeholder="Start typing a name, email, or city…" [formControl]="searchControl" autocomplete="off" />
+      @if (searching()) {
+        <mat-spinner matSuffix diameter="18"></mat-spinner>
+      }
+    </mat-form-field>
+  </div>
+
+  @if (!query()) {
+    <helix-empty-state icon="person_search" title="Search for a claimant" message="Results appear here as you type — try a name like “Garcia” or a city."></helix-empty-state>
+  } @else if (!searching() && results().length === 0) {
+    <helix-empty-state icon="person_off" title="No claimants found" [message]="'No matches for “' + query() + '”.'"></helix-empty-state>
+  } @else {
+    <div class="claimant-grid">
+      @for (c of results(); track c.id) {
+        <div class="helix-card claimant-card">
+          <div class="claimant-card__avatar">{{ c.firstName.charAt(0) }}{{ c.lastName.charAt(0) }}</div>
+          <div class="claimant-card__body">
+            <div class="claimant-card__name">{{ c.firstName }} {{ c.lastName }}</div>
+            <div class="claimant-card__detail">{{ c.email }}</div>
+            <div class="claimant-card__detail">{{ c.phone }}</div>
+            <div class="claimant-card__detail">{{ c.city }}, {{ c.state }}</div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

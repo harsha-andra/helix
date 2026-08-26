@@ -1,0 +1,70 @@
+<div class="step">
+  <div>
+    <h3 class="step-section-title">Review &amp; submit</h3>
+    <p class="step__hint">Double-check everything below, then submit the claim.</p>
+  </div>
+
+  <div class="review-section">
+    <span class="field-group__label">Policy</span>
+    @if (policy(); as p) {
+      <div class="selected-card__title">{{ p.policyNumber }}</div>
+      <div class="selected-card__subtitle">{{ p.holderName }} · {{ p.productName }}</div>
+    } @else {
+      <div class="selected-card__subtitle">Not selected</div>
+    }
+  </div>
+
+  <div class="review-section">
+    <span class="field-group__label">Claimant &amp; incident</span>
+    @if (claimant(); as c) {
+      <div class="selected-card__title">{{ c.firstName }} {{ c.lastName }}</div>
+      <div class="selected-card__subtitle">{{ c.email }} · {{ c.city }}, {{ c.state }}</div>
+    }
+    <div class="selected-card__subtitle">Incident date: {{ incidentDate() ? (incidentDate() | date: 'MMM d, y') : 'Not set' }}</div>
+    <p>{{ description() || 'No description provided.' }}</p>
+  </div>
+
+  <div class="review-section">
+    <span class="field-group__label">Claim lines ({{ lines().length }})</span>
+    <div class="table-scroll">
+      <table class="lines-table">
+        <thead>
+          <tr>
+            <th>Coverage</th>
+            <th>Description</th>
+            <th>Claimed</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (line of lines(); track line.tempId) {
+            <tr>
+              <td>{{ line.coverageCode }}</td>
+              <td>{{ line.description || '—' }}</td>
+              <td>{{ (line.claimedAmount ?? 0) | currency }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <div class="lines-total">
+      <span>Total claimed:</span>
+      <strong>{{ total() | currency }}</strong>
+    </div>
+  </div>
+
+  <div class="review-section">
+    <span class="field-group__label">Documents ({{ documents().length }})</span>
+    @if (documents().length === 0) {
+      <div class="selected-card__subtitle">No documents attached.</div>
+    } @else {
+      <div class="doc-list">
+        @for (doc of documents(); track doc.tempId) {
+          <div class="doc-item">
+            <mat-icon class="doc-item__icon">description</mat-icon>
+            <span class="doc-item__name">{{ doc.fileName }}</span>
+          </div>
+        }
+      </div>
+    }
+  </div>
+</div>
