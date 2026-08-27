@@ -282,12 +282,19 @@ jobs:
   # AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID repository
   # variables (not secrets: none of the three are sensitive on their own,
   # and there is no long-lived credential in this repository to protect —
-  # see docs/SECURITY.md, "Secrets"). Skipped entirely on pull requests,
-  # where a fork could not obtain that token anyway.
+  # see docs/SECURITY.md, "Secrets").
+  #
+  # Gated on AZURE_CLIENT_ID being set. Until an Azure federated identity is
+  # configured for this repository the job SKIPS rather than failing at the
+  # login step — a skipped job leaves the run green, a failed login does not.
+  # Set the AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID / ACR_NAME
+  # repository variables (Settings → Secrets and variables → Actions → Variables)
+  # to turn publishing on. Skipped on pull requests regardless, where a fork
+  # could not obtain the token anyway.
   # -------------------------------------------------------------------------
   publish-dev-image:
     name: Publish dev image (ACR, OIDC)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AZURE_CLIENT_ID != ''
     needs: [integration-test, docker-build-scan, dependency-check, helm-lint]
     runs-on: ubuntu-latest
     permissions:
