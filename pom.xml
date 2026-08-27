@@ -36,6 +36,10 @@
     <testcontainers.version>1.20.3</testcontainers.version>
     <jaxb2.plugin.version>3.1.0</jaxb2.plugin.version>
     <jakarta.xml.ws.version>4.0.2</jakarta.xml.ws.version>
+    <!-- Override Spring Boot's managed Postgres driver (42.7.11) to pick up the fix for
+         CVE-2026-54291 (SCRAM-SHA-256-PLUS downgrade MITM), which the Trivy image scan flags
+         as HIGH. Fixed in 42.7.12; 42.7.13 is the current patch. -->
+    <postgresql.version>42.7.13</postgresql.version>
   </properties>
 
   <dependencyManagement>
