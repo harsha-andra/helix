@@ -50,6 +50,16 @@ RUN --mount=type=cache,target=/root/.m2 \
 # ---------------------------------------------------------------------------
 FROM eclipse-temurin:21-jre-alpine AS runtime
 
+# Patch the base image's OS packages before doing anything else.
+#
+# The Temurin Alpine base is rebuilt on its own cadence, so on any given day
+# it can lag the Alpine security repo — that is how CVE-2026-14456 (an OpenSSL
+# QUIC-server DoS, fixed in 3.5.8-r0) reaches the Trivy gate even though a fix
+# exists. `apk upgrade` pulls the current patched packages at build time, so
+# the image ships fixed rather than waiting on a base-image rebuild. The
+# scan stays strict (`--ignore-unfixed=false`); this keeps it green honestly.
+RUN apk update && apk upgrade --no-cache
+
 # Non-root. A JVM that gets remote-code-execution'd running as root can
 # still only do what a low-privilege OS user can do.
 RUN addgroup -S helix && adduser -S helix -G helix
